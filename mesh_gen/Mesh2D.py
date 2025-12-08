@@ -1,7 +1,5 @@
 import gmsh
 import argparse
-import sys
-import os
 
 class Mesh2D:
     """
@@ -25,17 +23,15 @@ class Mesh2D:
         
         
     def create_rect(self):
-        points = []
+        p1 = gmsh.model.geo.addPoint(0, 0, 0)
+        p2 = gmsh.model.geo.addPoint(self.l, 0, 0)
+        p3 = gmsh.model.geo.addPoint(self.l, self.h, 0)
+        p4 = gmsh.model.geo.addPoint(0, self.h, 0)
         
-        points[0] = gmsh.model.geo.addPoint(0, 0, 0)
-        points[1] = gmsh.model.geo.addPoint(self.l, 0, 0)
-        points[2] = gmsh.model.geo.addPoint(self.l, self.h, 0)
-        points[3] = gmsh.model.geo.addPoint(0, self.h, 0)
-        
-        self.lines.append(gmsh.model.geo.addLine(points[0], points[1]))
-        self.lines.append(gmsh.model.geo.addLine(points[1], points[2]))
-        self.lines.append(gmsh.model.geo.addLine(points[2], points[3]))
-        self.lines.append(gmsh.model.geo.addLine(points[3], points[0]))
+        self.lines.append(gmsh.model.geo.addLine(p1, p2))
+        self.lines.append(gmsh.model.geo.addLine(p2, p3))
+        self.lines.append(gmsh.model.geo.addLine(p3, p4))
+        self.lines.append(gmsh.model.geo.addLine(p4, p1))
         
         # usefull to tell dealII what is what precisely
         gmsh.model.addPhysicalGroup(1, [self.lines[3]], 0, name="Inlet")
@@ -96,10 +92,10 @@ class Mesh2D:
         
         gmsh.model.geo.synchronize()
         
-        self.setFields(0.15, 0.5, 0.1, 0.02, 100)       
+        self.setFields(0.15, 0.5, 0.02, 0.1, 100)       
         
         gmsh.model.mesh.generate(2) # Generate 2D mesh
-        gmsh.write("./mesh/" + output_filename + ".msh")
+        gmsh.write(f"./mesh/{output_filename}.msh")
 
         # Launch GUI to see the result (optional)
         gmsh.fltk.run()
@@ -126,7 +122,7 @@ def main():
     # Parse the arguments
     args = parser.parse_args()
     
-    mesh = Mesh2D(args.length, args.heigth)
+    mesh = Mesh2D(args.length, args.height)
     mesh.build(args.cx, args.cy, args.radius, "mesh2D_example")
 
 
