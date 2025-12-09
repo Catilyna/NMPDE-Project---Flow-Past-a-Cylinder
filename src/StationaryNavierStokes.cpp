@@ -1,6 +1,9 @@
 #include "StationaryNavierStokes.h"
 #include "BoundaryValues.h"
-#include "BlockSchurPreconditioner.h"
+#include "./preconditioners/BlockPrecondtioner.h"
+#include "./preconditioners/BlockSchurPreconditioner.h"
+#include "./preconditioners/BlockTriangularPrecondition.hpp"
+#include "./preconditioners/PreconditionIdentity.h"
 #include <deal.II/numerics/solution_transfer.h>
 #include <deal.II/numerics/error_estimator.h>
 #include <deal.II/numerics/data_out.h>
