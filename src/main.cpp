@@ -1,9 +1,9 @@
-#include "StationaryNavierStokes.h"
+#include "StationaryNavierStokes.hpp"
 #include <iostream>
 
 int main() {
+    using namespace NavierStokes;
     try {
-        using namespace NavierStokes;
         StationaryNavierStokes<2> flow(/* degree = */ 1);
         flow.run(4);
     } catch (std::exception &exc) {

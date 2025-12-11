@@ -1,4 +1,4 @@
-#include "StationaryNavierStokes.h"
+#include "StationaryNavierStokes.hpp"
 #include "BoundaryValues.h"
 #include "./preconditioners/BlockPrecondtioner.h"
 #include "./preconditioners/BlockSchurPreconditioner.h"
@@ -10,59 +10,7 @@
 #include <deal.II/base/utilities.h>
 #include <fstream>
 #include <iomanip>
-#include <map>
-#include <vector>
-
-
-namespace NavierStokes {
-using namespace dealii;
-
-template <int dim>
-StationaryNavierStokes<dim>::StationaryNavierStokes(const unsigned int degree)
-	: viscosity(1.0 / 7500.0)
-	, gamma(1.0)
-	, degree(degree)
-	, triangulation(Triangulation<dim>::maximum_smoothing)
-	, fe(FE_Q<dim>(degree + 1) ^ dim, FE_Q<dim>(degree))
-	, dof_handler(triangulation)
-{}
-
-/** @brief method responsible for setting up the degrees of freedom (DoFs), 
- * renumbering them, and applying the boundary conditions before solving 
- * the linear system.
- */
-template <int dim>
-void StationaryNavierStokes<dim>::setup_dofs()
-{
-	// clear data
-	system_matrix.clear();
-	pressure_mass_matrix.clear();
-
-	dof_handler.distribute_dofs(fe);
-	std::vector<unsigned int> block_component(dim + 1, 0); // assign 0 to all components
-	block_component[dim] = 1; // assign 1 to the pressure component
-	
-	DoFRenumbering::component_wise(dof_handler, block_component);
-	dofs_per_block = DoFTools::count_dofs_per_fe_block(dof_handler, block_component);
-	unsigned int dof_u = dofs_per_block[0];
-	unsigned int dof_p = dofs_per_block[1];
-	const FEValuesExtractors::Vector velocities(0);
-	{
-		nonzero_constraints.clear();
-		DoFTools::make_hanging_node_constraints(dof_handler, nonzero_constraints);
-		VectorTools::interpolate_boundary_values(dof_handler, 0, BoundaryValues<dim>(), nonzero_constraints, fe.component_mask(velocities));
-	}
-	nonzero_constraints.close();
-	{
-		zero_constraints.clear();
-		DoFTools::make_hanging_node_constraints(dof_handler, zero_constraints);
-		VectorTools::interpolate_boundary_values(dof_handler, 0, Functions::ZeroFunction<dim>(dim + 1), zero_constraints, fe.component_mask(velocities));
-	}
-	zero_constraints.close();
-	std::cout << "Number of active cells: " << triangulation.n_active_cells() << std::endl
-			  << "Number of degrees of freedom: " << dof_handler.n_dofs() << " (" << dof_u << " + " << dof_p << ')' << std::endl;
-}
-
+r
 template <int dim>
 void StationaryNavierStokes<dim>::initialize_system()
 {

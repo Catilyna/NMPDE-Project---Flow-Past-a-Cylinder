@@ -37,7 +37,7 @@ using namespace dealii;
 
 template <int dim>
 class StationaryNavierStokes {
-public:
+    public:
     StationaryNavierStokes(const unsigned int degree);
     void run(const unsigned int refinement);
 private:
