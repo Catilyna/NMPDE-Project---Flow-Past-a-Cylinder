@@ -31,69 +31,70 @@
 #include <iostream>
 #include <vector>
 
-namespace NavierStokes
-
 using namespace dealii;
 
-template <int dim>
-class StationaryNavierStokes {
-    public:
-    StationaryNavierStokes(const unsigned int degree);
-    void run(const unsigned int refinement);
-private:
-    void setup_dofs();
+namespace NavierStokes{
 
-    void initialize_system();
+    template<int dim>
+    class StationaryNavierStokes {
+        public:
+        StationaryNavierStokes(const unsigned int degree);
+        void run(const unsigned int refinement);
+    private:
+        void setup_dofs();
 
-    void assemble(const bool initial_step, const bool assemble_matrix);
+        void initialize_system();
 
-    void assemble_system(const bool initial_step);
+        void assemble(const bool initial_step, const bool assemble_matrix);
 
-    void assemble_rhs(const bool initial_step);
+        void assemble_system(const bool initial_step);
 
-    void solve(const bool initial_step);
+        void assemble_rhs(const bool initial_step);
 
-    void refine_mesh();
+        void solve(const bool initial_step);
 
-    void process_solution(unsigned int refinement);
+        void refine_mesh();
 
-    void output_results(const unsigned int refinement_cycle) const;
+        void process_solution(unsigned int refinement);
 
-    void newton_iteration(const double tolerance,
-                         const unsigned int max_n_line_searches,
-                         const unsigned int max_n_refinements,
-                         const bool is_initial_step,
-                         const bool output_result);
+        void output_results(const unsigned int refinement_cycle) const;
 
-    void compute_initial_guess(double step_size);
+        void newton_iteration(const double tolerance,
+                            const unsigned int max_n_line_searches,
+                            const unsigned int max_n_refinements,
+                            const bool is_initial_step,
+                            const bool output_result);
 
-    double viscosity;
-    double gamma;
-    const unsigned int degree;
+        void compute_initial_guess(double step_size);
 
-    std::vector<types::global_dof_index> dofs_per_block;
+        double viscosity;
+        double gamma;
+        const unsigned int degree;
 
-    Triangulation<dim> triangulation;
+        std::vector<types::global_dof_index> dofs_per_block;
 
-    const FESystem<dim> fe;
+        Triangulation<dim> triangulation;
 
-    DoFHandler<dim> dof_handler;
+        const FESystem<dim> fe;
 
-    AffineConstraints<double> zero_constraints;
+        DoFHandler<dim> dof_handler;
 
-    AffineConstraints<double> nonzero_constraints;
+        AffineConstraints<double> zero_constraints;
 
-    BlockSparsityPattern sparsity_pattern;
+        AffineConstraints<double> nonzero_constraints;
 
-    BlockSparseMatrix<double> system_matrix;
+        BlockSparsityPattern sparsity_pattern;
 
-    SparseMatrix<double> pressure_mass_matrix;
+        BlockSparseMatrix<double> system_matrix;
 
-    BlockVector<double> present_solution;
+        SparseMatrix<double> pressure_mass_matrix;
 
-    BlockVector<double> newton_update;
+        BlockVector<double> present_solution;
 
-    BlockVector<double> system_rhs;
+        BlockVector<double> newton_update;
 
-    BlockVector<double> evaluation_point;
+        BlockVector<double> system_rhs;
+
+        BlockVector<double> evaluation_point;
+    };
 }; // namespace NavierStokes

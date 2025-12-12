@@ -2,7 +2,7 @@
 #define PRECONDITION_BLOCK_DIAGONAL_HPP
 
 #include <deal.II/lac/trilinos_sparse_matrix.h>
-#include <deal.II/lac/trilinos_block_vector.h>
+#include <deal.II/lac/trilinos_parallel_block_vector.h>
 #include <deal.II/lac/trilinos_precondition.h>
 
 namespace NavierStokes{
@@ -24,7 +24,7 @@ namespace NavierStokes{
              * using the Conjugate Gradient method.
              */
             void vmult(TrilinosWrappers::MPI::BlockVector        &dst,
-                        const TrilinosWrappers::MPI::BlockVecotr &src) const;
+                        const TrilinosWrappers::MPI::BlockVector &src) const;
 
         protected:
             const TrilinosWrappers::SparseMatrix *velocity_stiffness;
@@ -32,7 +32,7 @@ namespace NavierStokes{
 
             TrilinosWrappers::PreconditionILU preconditioner_velocity;
             TrilinosWrappers::PreconditionILU preconditioner_pressure;
-    }
-}
+    };
+};
 
 #endif

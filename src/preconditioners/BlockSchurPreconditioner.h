@@ -5,12 +5,13 @@
 #include <deal.II/lac/sparse_direct.h>
 #include <deal.II/lac/solver_cg.h>
 #include <deal.II/lac/precondition.h>
+#include <deal.II/base/subscriptor.h>
 
 namespace NavierStokes {
 using namespace dealii;
 
 template <class PreconditionerMp>
-class BlockSchurPreconditioner : public EnableObserverPointer {
+class BlockSchurPreconditioner : public Subscriptor {
 public:
     BlockSchurPreconditioner(double gamma,
                              double viscosity,

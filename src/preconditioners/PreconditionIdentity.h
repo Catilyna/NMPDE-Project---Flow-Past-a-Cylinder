@@ -1,7 +1,7 @@
 #ifndef PRECONDITION_IDENTITY_HPP
 #define PRECONDITION_IDENTITY_HPP
 
-#include <deal.II/lac/trilinos_block_vector.h>
+#include <deal.II/lac/trilinos_parallel_block_vector.h>
 
 namespace NavierStokes {
     using namespace dealii;
