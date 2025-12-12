@@ -17,22 +17,62 @@ namespace NavierStokes{
 	template <int dim>
 	void StationaryNavierStokes<dim>::initialize_system()
 	{
+		// part of initializing the mesh + dof handler is missing as I wait for bucelli to
+		// load full code of the previous lab
+
+		
+		pcout << "  Initializing the sparsity pattern" << std::endl;
+
+		Table<2, DoFTools::Coupling> coupling(dim + 1, dim + 1);
+		for (unsigned int c = 0; c < dim + 1; ++c)
 		{
-			BlockDynamicSparsityPattern dsp(dofs_per_block, dofs_per_block);
-			DoFTools::make_sparsity_pattern(dof_handler, dsp, nonzero_constraints);
-			sparsity_pattern.copy_from(dsp);
+			for (unsigned int d = 0; d < dim + 1; ++d)
+			{
+				if (c == dim && d == dim) // pressure-pressure term do not appear in the equations
+				coupling[c][d] = DoFTools::none;
+				else // other combinations
+				coupling[c][d] = DoFTools::always;
+			}
 		}
+
+		sparsity_pattern(block_owned_dofs,
+						MPI_COMM_WORLD);
+		DoFTools::make_sparsity_pattern(dof_handler, coupling, sparsity);
+		sparsity_pattern.compress();
+
+		// We also build a sparsity pattern for the pressure mass matrix.
+		for (unsigned int c = 0; c < dim + 1; ++c)
+		{
+			for (unsigned int d = 0; d < dim + 1; ++d)
+			{
+				if (c == dim && d == dim) // pressure-pressure term
+				coupling[c][d] = DoFTools::always;
+				else // other combinations
+				coupling[c][d] = DoFTools::none;
+			}
+		}
+		TrilinosWrappers::BlockSparsityPattern sparsity_pressure_mass(block_owned_dofs,
+																	 MPI_COMM_WORLD);
+		DoFTools::make_sparsity_pattern(dof_handler,
+										coupling,
+										sparsity_pressure_mass);
+		sparsity_pressure_mass.compress();
+
 		// code taken from Bucelli's labs
-		std::cout << "  Initializing the system matrix" << std::endl;
+		pcout << "  Initializing the system matrix" << std::endl;
 		system_matrix.reinit(sparsity_pattern);
+		pressure_mass.reinit(sparsity_pressure_mass);
 	
-		std::cout << "  Initializing the solution vector" << std::endl;
+		pcout << "  Initializing the solution vector" << std::endl;
 		present_solution.reinit(dofs_per_block);
 	
 		newton_update.reinit(dofs_per_block);
 	
-		std::cout << "  Initializing the system right-hand side" << std::endl;
+		pcout << "  Initializing the system right-hand side" << std::endl;
 		system_rhs.reinit(dofs_per_block);
+		pcout << "  Initializing the solution vector" << std::endl;
+		solution_owned.reinit(block_owned_dofs, MPI_COMM_WORLD);
+		solution.reinit(block_owned_dofs, block_relevant_dofs, MPI_COMM_WORLD);
 	}
 	
 	/** @brief Assembles the whole system. (too lazy) */
