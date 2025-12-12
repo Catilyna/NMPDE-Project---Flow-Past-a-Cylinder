@@ -35,8 +35,8 @@ namespace NavierStokes{
 			}
 		}
 
-		sparsity_pattern(block_owned_dofs,
-						MPI_COMM_WORLD);
+		TrilinosWrappers::BlockSparsityPattern sparsity(block_owned_dofs,
+                                                        MPI_COMM_WORLD);
 		DoFTools::make_sparsity_pattern(dof_handler, coupling, sparsity);
 		sparsity_pattern.compress();
 
@@ -69,7 +69,7 @@ namespace NavierStokes{
 		newton_update.reinit(dofs_per_block);
 	
 		pcout << "  Initializing the system right-hand side" << std::endl;
-		system_rhs.reinit(dofs_per_block);
+		system_rhs.reinit(dofs_per_block, MPI_COMM_WORLD);
 		pcout << "  Initializing the solution vector" << std::endl;
 		solution_owned.reinit(block_owned_dofs, MPI_COMM_WORLD);
 		solution.reinit(block_owned_dofs, block_relevant_dofs, MPI_COMM_WORLD);
@@ -87,7 +87,7 @@ namespace NavierStokes{
 		FEValues<dim> fe_values(fe, quadrature_formula, update_values | update_quadrature_points | update_JxW_values | update_gradients);
 	
 		// usefull values referring to dofs and quadrature points
-		const unsigned int dofs_per_cell = fe.n_dofs_per_cell();
+		const unsigned int dofs_per_cell = fe->n_dofs_per_cell();
 		const unsigned int n_q_points = quadrature_formula.size();
 	
 		// istantiate local matrix and vectors
@@ -159,8 +159,8 @@ namespace NavierStokes{
 			}
 		}
 		if (assemble_matrix) {
-			pressure_mass_matrix.reinit(sparsity_pattern.block(1, 1));
-			pressure_mass_matrix.copy_from(system_matrix.block(1, 1));
+			pressure_mass.reinit(sparsity_pattern.block(1, 1));
+			pressure_mass.copy_from(system_matrix.block(1, 1));
 	
 			// bottom right block of the system block has to be zero
 			system_matrix.block(1, 1) = 0;
@@ -191,10 +191,10 @@ namespace NavierStokes{
 		
 		// initialize ILU preconditioner with the pressure mass matrix we derived in the assemble() function
 		SparseILU<double> pmass_preconditioner;
-		pmass_preconditioner.initialize(pressure_mass_matrix, SparseILU<double>::AdditionalData());
+		pmass_preconditioner.initialize(pressure_mass, SparseILU<double>::AdditionalData());
 	
 		// initialize BlockShurPreconditioner passing the previously computed pmass precondtioner;
-		const BlockSchurPreconditioner<SparseILU<double>> preconditioner(gamma, viscosity, system_matrix, pressure_mass_matrix, pmass_preconditioner);
+		const BlockSchurPreconditioner<SparseILU<double>> preconditioner(gamma, viscosity, system_matrix, pressure_mass, pmass_preconditioner);
 		
 		// solve using the Shur Preconditioner
 		gmres.solve(system_matrix, newton_update, system_rhs, preconditioner);
@@ -209,13 +209,13 @@ namespace NavierStokes{
 	void StationaryNavierStokes<dim>::refine_mesh()
 	{
 		// error estimation
-		Vector<float> estimated_error_per_cell(triangulation.n_active_cells());
+		Vector<float> estimated_error_per_cell(mesh.n_active_cells());
 		const FEValuesExtractors::Vector velocity(0);
-		KellyErrorEstimator<dim>::estimate(dof_handler, QGauss<dim - 1>(degree + 1), std::map<types::boundary_id, const Function<dim> *>(), present_solution, estimated_error_per_cell, fe.component_mask(velocity));
+		KellyErrorEstimator<dim>::estimate(dof_handler, QGauss<dim - 1>(degree + 1), std::map<types::boundary_id, const Function<dim> *>(), present_solution, estimated_error_per_cell, fe->component_mask(velocity));
 	
-		// here it takes the 0.3 (30%) of the cells with the highest error from the triangulation for refinement
-		GridRefinement::refine_and_coarsen_fixed_number(triangulation, estimated_error_per_cell, 0.3, 0.0);
-		triangulation.prepare_coarsening_and_refinement();
+		// here it takes the 0.3 (30%) of the cells with the highest error from the mesh for refinement
+		GridRefinement::refine_and_coarsen_fixed_number(mesh, estimated_error_per_cell, 0.3, 0.0);
+		mesh.prepare_coarsening_and_refinement();
 
 		Vector<double> flat_present_solution(dof_handler.n_dofs());
 
@@ -232,7 +232,7 @@ namespace NavierStokes{
 		// This also means we need to store somewhere the solutiuon computed so far
 		SolutionTransfer<dim, Vector<double>> solution_transfer(dof_handler);
 		solution_transfer.prepare_for_coarsening_and_refinement(flat_present_solution);
-		triangulation.execute_coarsening_and_refinement();
+		mesh.execute_coarsening_and_refinement();
 	
 		// redefines dof
 		setup_dofs();
@@ -395,8 +395,8 @@ namespace NavierStokes{
 	template <int dim>
 	void StationaryNavierStokes<dim>::run(const unsigned int refinement)
 	{
-		GridGenerator::hyper_cube(triangulation);
-		triangulation.refine_global(5);
+		GridGenerator::hyper_cube(mesh);
+		mesh.refine_global(5);
 		const double Re = 1.0 / viscosity;
 		if (Re > 1000.0) {
 			std::cout << "Searching for initial guess ..." << std::endl;

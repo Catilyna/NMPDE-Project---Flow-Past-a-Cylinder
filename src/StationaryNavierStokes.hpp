@@ -22,10 +22,16 @@
 #include <deal.II/grid/grid_generator.h>
 #include <deal.II/grid/grid_refinement.h>
 #include <deal.II/grid/grid_tools.h>
+#include <deal.II/grid/grid_in.h>
 
 #include <deal.II/dofs/dof_handler.h>
 #include <deal.II/dofs/dof_renumbering.h>
 #include <deal.II/dofs/dof_tools.h>
+#include <deal.II/fe/fe_simplex_p.h>
+#include <deal.II/fe/fe_system.h>
+#include <deal.II/fe/fe_values.h>
+#include <deal.II/fe/fe_values_extractors.h>
+#include <deal.II/fe/mapping_fe.h>
 
 #include <deal.II/fe/fe_q.h>
 #include <deal.II/fe/fe_system.h>
@@ -39,6 +45,8 @@
 
 #include <deal.II/lac/sparse_direct.h>
 #include <deal.II/lac/sparse_ilu.h>
+
+#include <deal.II/distributed/fully_distributed_tria.h>
 #include <fstream>
 #include <iostream>
 #include <vector>
@@ -80,13 +88,15 @@ namespace NavierStokes{
             const double alpha = 1.0;
         };
 
-        StationaryNavierStokes(const std::string  &mesh_file_name_,)
-            : mpi_size(Utilities::MPI::n_mpi_processes(MPI_COMM_WORLD))
+        StationaryNavierStokes(const std::string &mesh_file_name_, unsigned int degree_ = 2)
+            : degree(degree_)
+            , mpi_size(Utilities::MPI::n_mpi_processes(MPI_COMM_WORLD))
             , mpi_rank(Utilities::MPI::this_mpi_process(MPI_COMM_WORLD))
             , pcout(std::cout, mpi_rank == 0)
             , mesh_file_name(mesh_file_name_)
             , mesh(MPI_COMM_WORLD)
         {};
+
         void run(const unsigned int refinement);
     private:
         void setup_dofs();
@@ -131,7 +141,10 @@ namespace NavierStokes{
 
         std::vector<types::global_dof_index> dofs_per_block;
 
-        parallel::fullydistributed::Triangulation<dim> triangulation;
+        // Luca: I am quite confused about the template parameters here
+        // G++ says that both are required, but Bucelli in his code only
+        // specifies one (and it works). Need to clarify this point.
+        parallel::fullydistributed::Triangulation<dim, dim> mesh; 
 
         std::unique_ptr<FiniteElement<dim>> fe;
 
@@ -159,5 +172,8 @@ namespace NavierStokes{
         BlockVector<double> newton_update;
 
         BlockVector<double> evaluation_point;
+
+        BlockVector<double> present_solution;
+        std::vector<IndexSet> block_relevant_dofs;
     };
 }; // namespace NavierStokes
