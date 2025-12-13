@@ -59,6 +59,11 @@ namespace NavierStokes{
     class StationaryNavierStokes {
         public:
 
+        /** @brief class that defines the Inlet Velocity object. So the value
+         * of the velocity of the fluid at the inlet (boundary). 
+         * It must be initialized with (dim + 1) component considering
+         * pressure values aswell which will be set to 0.0 .
+         */
         class InletVelocity : public Function<dim>
         {
         public:
@@ -125,7 +130,8 @@ namespace NavierStokes{
 
         void compute_initial_guess(double step_size);
 
-        double viscosity;
+        double viscosity = 1.;
+        double p_out = 1.;
         double gamma;
         const unsigned int degree;
 
@@ -153,7 +159,10 @@ namespace NavierStokes{
 
         DoFHandler<dim> dof_handler;
         IndexSet locally_owned_dofs;
+        IndexSet locally_relevant_dofs;
+
         std::vector<IndexSet> block_owned_dofs;
+        std::vector<IndexSet> block_relevant_dofs;
 
         AffineConstraints<double> zero_constraints;
 

@@ -17,9 +17,57 @@ namespace NavierStokes{
 	template <int dim>
 	void StationaryNavierStokes<dim>::initialize_system()
 	{
-		// part of initializing the mesh + dof handler is missing as I wait for bucelli to
-		// load full code of the previous lab
+		// Initialization of the finite element space
+		const FE_SimplexP<dim> fe_scalar_velocity(degree_velocity);
+		const FE_SimplexP<dim> fe_scalar_pressure(degree_pressure);
 
+		// velocity and pressure will be considered as blocks and not components
+		fe = std::make_unique<FESystem<dim>>(fe_scalar_velocity,
+											 dim,
+											 fe_scalar_pressure,
+											 1);
+
+		// initialize quadrature. We need this instead of dealII implementation as we 
+		// are using triangulations and gmsh.
+		quadrature = std::make_unique<QGaussSimplex<dim>>(fe->degree + 1);
+		quadrature_face = std::make_unique<QGaussSimplex<dim - 1>>(fe->degree + 1);
+		pcout << "  Quadrature points per cell = " << quadrature->size()
+          << std::endl;
+		pcout << "  Quadrature points per face = " << quadrature_face->size()
+          << std::endl;
+
+		pout << "Initializing the DoF handler." << std::endl;
+
+		dof_handler.reinit(mesh);
+		dof_handler.distribute_dofs(*fe);
+
+		// enforce a specific ordering for the dofs. (I need this order to be respected)
+		// block component has values 0 and 1 where:
+		//     - 0 means velocity dof
+		//     - 1 means pressure dof
+		std::vector<unsigned int> block_component(dim + 1, 0);
+		block_component[dim] = 1;
+		DoFRenumbering::component_wise(dof_handler, block_component);
+
+		locally_owned_dofs = dof_handler.locally_owned_dofs();
+		locally_relevant_dofs = DoFTools::extract_locally_relevant_dofs(dof_handler);
+
+		// now get the block dofs for velocity and pressure
+		std::vector<types::global_dof_indices> dofs_per_block = 
+			DoFTools::count_dofs_per_fe_block(dof_handler, block_component);
+		const unsigned int n_u = dofs_per_block[0]; 
+		const unsigned int n_p = dofs_per_block[1]; 
+
+		block_owned_dofs.resize(2);
+		block_relevant_dofs.resize(2);
+
+		// get_view gives back a subset of elements of a vector
+		block_owned_dofs[0] = locally_owned_dofs.get_view(0, n_u);
+		block_relevant_dofs[0] = locally_relevant_dofs.get_view(0, n_u);
+		
+		// logic here is to take n_p elements from the n_u index and assign it to the second block
+		block_owned_dofs[1] = locally_owned_dofs.get_view(n_u, n_u + n_p);
+		block_relevant_dofs[1] = locally_relevant_dofs.get_view(n_u, n_u + n_p);
 		
 		pcout << "  Initializing the sparsity pattern" << std::endl;
 
@@ -35,9 +83,9 @@ namespace NavierStokes{
 			}
 		}
 
-		TrilinosWrappers::BlockSparsityPattern sparsity(block_owned_dofs,
-                                                        MPI_COMM_WORLD);
-		DoFTools::make_sparsity_pattern(dof_handler, coupling, sparsity);
+		sparsity_pattern(block_owned_dofs,
+                        MPI_COMM_WORLD);
+		DoFTools::make_sparsity_pattern(dof_handler, coupling, sparsity_pattern);
 		sparsity_pattern.compress();
 
 		// We also build a sparsity pattern for the pressure mass matrix.
@@ -82,19 +130,25 @@ namespace NavierStokes{
 		if (assemble_matrix)
 			system_matrix = 0;
 		system_rhs = 0;
+		pressure_mass = 0;
 	
-		const QGauss<dim> quadrature_formula(degree + 2);
-		FEValues<dim> fe_values(fe, quadrature_formula, update_values | update_quadrature_points | update_JxW_values | update_gradients);
+		FEValues<dim> fe_values(*fe, *quadrature, update_values | update_gradients | 
+												update_quadrature_points | update_JxW_values);
 	
+		FEFaceValues<dim> fe_face_values(*fe, *quadrature_face, update_values | update_normal_vectors | 
+													update_JxW_values);
+
 		// usefull values referring to dofs and quadrature points
 		const unsigned int dofs_per_cell = fe->n_dofs_per_cell();
 		const unsigned int n_q_points = quadrature_formula.size();
-	
-		// istantiate local matrix and vectors
+ 		const unsigned int n_q_face      = quadrature_face->size();
+
 		const FEValuesExtractors::Vector velocities(0);
-		const FEValuesExtractors::Scalar pressure(dim);
+    	const FEValuesExtractors::Scalar pressure(dim);
+	
 		FullMatrix<double> local_matrix(dofs_per_cell, dofs_per_cell);
-		Vector<double> local_rhs(dofs_per_cell);
+		Vector<double>     local_rhs(dofs_per_cell);
+		FullMatrix<double> cell_pressure_mass_matrix(dofs_per_cell, dofs_per_cell);
 	
 		std::vector<types::global_dof_index> local_dof_indices(dofs_per_cell);
 	
@@ -110,11 +164,15 @@ namespace NavierStokes{
 		std::vector<double> phi_p(dofs_per_cell);               // pressure
 	
 		for (const auto &cell : dof_handler.active_cell_iterators()) {
+			if(!cell->is_locally_owned()) continue;
+
 			fe_values.reinit(cell);
 	
-			local_matrix = 0;
-			local_rhs = 0;
+			local_matrix         = 0.0;
+			cell_pressure_matrix = 0.0;
+			local_rhs            = 0.0;
 	
+
 			// We need to know the values and the gradient of velocity on quadrature nodes (explained by Bucelli)
 			fe_values[velocities].get_function_values(evaluation_point, present_velocity_values);
 			fe_values[velocities].get_function_gradients(evaluation_point, present_velocity_gradients);
@@ -134,8 +192,10 @@ namespace NavierStokes{
 													 + phi_u[i] * (present_velocity_gradients[q] * phi_u[j]) 
 													+ phi_u[i] * (grad_phi_u[j] * present_velocity_values[q])
 													- div_phi_u[i] * phi_p[j] - phi_p[i] * div_phi_u[j] 
-													+ gamma * div_phi_u[i] * div_phi_u[j] + phi_p[i] * phi_p[j])
-													* fe_values.JxW(q);
+													+ gamma * div_phi_u[i] * div_phi_u[j]) // here there was this term here: phi_p[i] * phi_p[j] used in pressure matrix
+							
+							// added this, exactly how bucelli implemented it. Dont know if it's mathematically correct tough
+							cell_pressure_mass_matrix(i, j) += phi_p[i] * phi_p[j] * fe_values.JxW(q);
 						}
 					}
 					double present_velocity_divergence = trace(present_velocity_gradients[q]);
@@ -147,6 +207,24 @@ namespace NavierStokes{
 									* fe_values.JxW(q);
 				}
 			}
+			// boundary conditions
+			if(cell->at_boundary()){
+				for(size_t f = 0; f < cell->n_faces();++f){
+					// apply that to the outlet boundary where the id == 2 --> look gmsh to be sure
+					if(cell->face(f)->at_boundary() && cell->face(f)->boundary_id() == 2){
+						fe_face_values.reinit(cell, f);
+
+						for (size_t q = 0; q < n_q_face; ++q){
+							for (size_t i = 0; i < dofs_per_cell; ++i){
+									local_rhs(i) += -p_out * 
+										scalar_product(fe_face_values.normal_vecotr(q),
+										fe_face_values[velocity].value(i, q)) * fe_face_values.JxW(q);
+								}
+						}
+					}
+				}
+			}
+
 			cell->get_dof_indices(local_dof_indices);
 			
 			// this object here holds a list on constraint based on the fact wheter
@@ -157,13 +235,41 @@ namespace NavierStokes{
 			} else {
 				constraints_used.distribute_local_to_global(local_rhs, local_dof_indices, system_rhs);
 			}
+			if (assemble_matrix) pressure_mass.add(dof_indices, cell_pressure_mass_matrix);
 		}
-		if (assemble_matrix) {
-			pressure_mass.reinit(sparsity_pattern.block(1, 1));
-			pressure_mass.copy_from(system_matrix.block(1, 1));
-	
-			// bottom right block of the system block has to be zero
-			system_matrix.block(1, 1) = 0;
+		// I dont know if here we need a check on assemble matrix for system and pressure_mass
+		system_matrix.compress(VectorOperation::add);
+		pressure_mass.compress(VectorOperation::add);
+		system_rhs.compress(VectorOperation::add);
+
+		// Dirichlet Boundary conditions
+		{
+			std::map<types::global_dof_index, double>           boundary_values;
+    		std::map<types::boundary_id, const Function<dim> *> boundary_functions;
+
+			//object that represents a sequence of booleans true for velocity and false for pressure
+			ComponentMask mask_velocity(dim + 1, true);
+			mask_velocity(dim, false); // set the last one to false
+
+			// set a zero function for the b.conditions on the wall
+			Functions::ZeroFunctio<dim> zero_function(dim + 1);
+
+			boundary_functions[0] = &inlet_velocity; // boundary id zero means inlet
+			VectorTools::interpolate_boundary_values(dof_handler,
+				boundary_functions,
+				boundary_values,
+				mask_velocity);
+			
+			// in this way wall wins (Bucelli explain why we do this)
+			boundary_functions.clear()	
+			boundary_functions[1] = &zero_function;
+			VectorTools::interpolate_boundary_values(dof_handler,
+				boundary_functions,
+				boundary_values,
+				mask_velocity);
+
+			MatrixTools::apply_boundary_values(
+      			boundary_values, system_matrix, solution_owned, system_rhs, false);
 		}
 	}
 	
