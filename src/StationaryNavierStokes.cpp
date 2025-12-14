@@ -306,6 +306,8 @@ namespace NavierStokes{
 		gmres.solve(system_matrix, newton_update, system_rhs, preconditioner);
 		std::cout << "FGMRES steps: " << solver_control.last_step() << std::endl;
 		constraints_used.distribute(newton_update);
+
+		solution = newton_update // is this correct?
 	}
 	
 	/** @brief Function identifies area where the error is larger and refines the mesh
