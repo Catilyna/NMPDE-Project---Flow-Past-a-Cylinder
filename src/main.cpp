@@ -4,7 +4,7 @@
 int main() {
     using namespace NavierStokes;
     try {
-        StationaryNavierStokes<2> flow(/*mesh_file_name=*/"../mesh/mesh2D_example.msh");
+        StationaryNavierStokes<2> flow(/*mesh_file_name=*/"../mesh/mesh2D_example.msh", 2, 1);
         flow.run(4);
     } catch (std::exception &exc) {
         std::cerr << std::endl << std::endl

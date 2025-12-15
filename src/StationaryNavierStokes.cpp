@@ -17,6 +17,23 @@ namespace NavierStokes{
 	template <int dim>
 	void StationaryNavierStokes<dim>::initialize_system()
 	{
+		{
+			pcout << "Initializing the mesh" << std::endl;
+
+			Triangulation<dim> mesh_serial;
+
+			GridIn<dim> grid_in;
+			grid_in.attach_triangulation(mesh_serial);
+
+			std::ifstream grid_in_file(mesh_file_name);
+			grid_in.read_msh(grid_in_file);
+
+			GridTools::partition_triangulation(mpi_size, mesh_serial);
+			const auto construction_data = TriangulationDescription::Utilities::
+			create_description_from_triangulation(mesh_serial, MPI_COMM_WORLD);
+			mesh.create_triangulation(construction_data);
+		}
+
 		// Initialization of the finite element space
 		const FE_SimplexP<dim> fe_scalar_velocity(degree_velocity);
 		const FE_SimplexP<dim> fe_scalar_pressure(degree_pressure);
@@ -36,7 +53,7 @@ namespace NavierStokes{
 		pcout << "  Quadrature points per face = " << quadrature_face->size()
           << std::endl;
 
-		pout << "Initializing the DoF handler." << std::endl;
+		pcout << "Initializing the DoF handler." << std::endl;
 
 		dof_handler.reinit(mesh);
 		dof_handler.distribute_dofs(*fe);
@@ -53,8 +70,7 @@ namespace NavierStokes{
 		locally_relevant_dofs = DoFTools::extract_locally_relevant_dofs(dof_handler);
 
 		// now get the block dofs for velocity and pressure
-		std::vector<types::global_dof_indices> dofs_per_block = 
-			DoFTools::count_dofs_per_fe_block(dof_handler, block_component);
+		std::vector<types::global_dof_index> dofs_per_block = DoFTools::count_dofs_per_fe_block(dof_handler, block_component);
 		const unsigned int n_u = dofs_per_block[0]; 
 		const unsigned int n_p = dofs_per_block[1]; 
 
@@ -83,9 +99,9 @@ namespace NavierStokes{
 			}
 		}
 
-		sparsity_pattern(block_owned_dofs,
-                        MPI_COMM_WORLD);
-		DoFTools::make_sparsity_pattern(dof_handler, coupling, sparsity_pattern);
+		TrilinosWrappers::BlockSparsityPattern sparsity(block_owned_dofs,
+														MPI_COMM_WORLD);
+		DoFTools::make_sparsity_pattern(dof_handler, coupling, sparsity);
 		sparsity_pattern.compress();
 
 		// We also build a sparsity pattern for the pressure mass matrix.
@@ -117,7 +133,7 @@ namespace NavierStokes{
 		newton_update.reinit(dofs_per_block);
 	
 		pcout << "  Initializing the system right-hand side" << std::endl;
-		system_rhs.reinit(dofs_per_block, MPI_COMM_WORLD);
+		system_rhs.reinit(block_owned_dofs, MPI_COMM_WORLD);
 		pcout << "  Initializing the solution vector" << std::endl;
 		solution_owned.reinit(block_owned_dofs, MPI_COMM_WORLD);
 		solution.reinit(block_owned_dofs, block_relevant_dofs, MPI_COMM_WORLD);
@@ -140,7 +156,7 @@ namespace NavierStokes{
 
 		// usefull values referring to dofs and quadrature points
 		const unsigned int dofs_per_cell = fe->n_dofs_per_cell();
-		const unsigned int n_q_points = quadrature_formula.size();
+		const unsigned int n_q_points = quadrature->size();
  		const unsigned int n_q_face      = quadrature_face->size();
 
 		const FEValuesExtractors::Vector velocities(0);
@@ -169,7 +185,7 @@ namespace NavierStokes{
 			fe_values.reinit(cell);
 	
 			local_matrix         = 0.0;
-			cell_pressure_matrix = 0.0;
+			cell_pressure_mass_matrix = 0.0;
 			local_rhs            = 0.0;
 	
 
@@ -192,7 +208,7 @@ namespace NavierStokes{
 													 + phi_u[i] * (present_velocity_gradients[q] * phi_u[j]) 
 													+ phi_u[i] * (grad_phi_u[j] * present_velocity_values[q])
 													- div_phi_u[i] * phi_p[j] - phi_p[i] * div_phi_u[j] 
-													+ gamma * div_phi_u[i] * div_phi_u[j]) // here there was this term here: phi_p[i] * phi_p[j] used in pressure matrix
+													+ gamma * div_phi_u[i] * div_phi_u[j]); // here there was this term here: phi_p[i] * phi_p[j] used in pressure matrix
 							
 							// added this, exactly how bucelli implemented it. Dont know if it's mathematically correct tough
 							cell_pressure_mass_matrix(i, j) += phi_p[i] * phi_p[j] * fe_values.JxW(q);
@@ -217,8 +233,8 @@ namespace NavierStokes{
 						for (size_t q = 0; q < n_q_face; ++q){
 							for (size_t i = 0; i < dofs_per_cell; ++i){
 									local_rhs(i) += -p_out * 
-										scalar_product(fe_face_values.normal_vecotr(q),
-										fe_face_values[velocity].value(i, q)) * fe_face_values.JxW(q);
+										scalar_product(fe_face_values.normal_vector(q),
+										fe_face_values[velocities].value(i, q)) * fe_face_values.JxW(q);
 								}
 						}
 					}
@@ -235,7 +251,7 @@ namespace NavierStokes{
 			} else {
 				constraints_used.distribute_local_to_global(local_rhs, local_dof_indices, system_rhs);
 			}
-			if (assemble_matrix) pressure_mass.add(dof_indices, cell_pressure_mass_matrix);
+			if (assemble_matrix) pressure_mass.add(local_dof_indices, cell_pressure_mass_matrix);
 		}
 		// I dont know if here we need a check on assemble matrix for system and pressure_mass
 		system_matrix.compress(VectorOperation::add);
@@ -249,10 +265,12 @@ namespace NavierStokes{
 
 			//object that represents a sequence of booleans true for velocity and false for pressure
 			ComponentMask mask_velocity(dim + 1, true);
-			mask_velocity(dim, false); // set the last one to false
+			std::vector<bool> mask_values(dim + 1, true);
+			mask_values[dim] = false;
+			mask_velocity = ComponentMask(mask_values);
 
 			// set a zero function for the b.conditions on the wall
-			Functions::ZeroFunctio<dim> zero_function(dim + 1);
+			Functions::ZeroFunction<dim> zero_function(dim + 1);
 
 			boundary_functions[0] = &inlet_velocity; // boundary id zero means inlet
 			VectorTools::interpolate_boundary_values(dof_handler,
@@ -261,7 +279,7 @@ namespace NavierStokes{
 				mask_velocity);
 			
 			// in this way wall wins (Bucelli explain why we do this)
-			boundary_functions.clear()	
+			boundary_functions.clear();
 			boundary_functions[1] = &zero_function;
 			VectorTools::interpolate_boundary_values(dof_handler,
 				boundary_functions,
@@ -296,18 +314,19 @@ namespace NavierStokes{
 		SolverFGMRES<BlockVector<double>> gmres(solver_control);
 		
 		// initialize ILU preconditioner with the pressure mass matrix we derived in the assemble() function
-		SparseILU<double> pmass_preconditioner;
-		pmass_preconditioner.initialize(pressure_mass, SparseILU<double>::AdditionalData());
+		TrilinosWrappers::PreconditionILU pmass_preconditioner;
+		pmass_preconditioner.initialize(pressure_mass.block(0,0), 
+								TrilinosWrappers::PreconditionILU::AdditionalData());
 	
 		// initialize BlockShurPreconditioner passing the previously computed pmass precondtioner;
-		const BlockSchurPreconditioner<SparseILU<double>> preconditioner(gamma, viscosity, system_matrix, pressure_mass, pmass_preconditioner);
+		const BlockSchurPreconditioner<TrilinosWrappers::PreconditionILU> preconditioner(gamma, viscosity, system_matrix, pressure_mass, pmass_preconditioner);
 		
 		// solve using the Shur Preconditioner
 		gmres.solve(system_matrix, newton_update, system_rhs, preconditioner);
 		std::cout << "FGMRES steps: " << solver_control.last_step() << std::endl;
 		constraints_used.distribute(newton_update);
 
-		solution = newton_update // is this correct?
+		solution = newton_update; // is this correct?
 	}
 	
 	/** @brief Function identifies area where the error is larger and refines the mesh
@@ -319,7 +338,7 @@ namespace NavierStokes{
 		// error estimation
 		Vector<float> estimated_error_per_cell(mesh.n_active_cells());
 		const FEValuesExtractors::Vector velocity(0);
-		KellyErrorEstimator<dim>::estimate(dof_handler, QGauss<dim - 1>(degree + 1), std::map<types::boundary_id, const Function<dim> *>(), present_solution, estimated_error_per_cell, fe->component_mask(velocity));
+		KellyErrorEstimator<dim>::estimate(dof_handler, QGauss<dim - 1>(degree_velocity + degree_pressure + 1), std::map<types::boundary_id, const Function<dim> *>(), present_solution, estimated_error_per_cell, fe->component_mask(velocity));
 	
 		// here it takes the 0.3 (30%) of the cells with the highest error from the mesh for refinement
 		GridRefinement::refine_and_coarsen_fixed_number(mesh, estimated_error_per_cell, 0.3, 0.0);

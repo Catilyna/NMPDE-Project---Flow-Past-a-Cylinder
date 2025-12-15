@@ -15,15 +15,15 @@ class BlockSchurPreconditioner : public Subscriptor {
 public:
     BlockSchurPreconditioner(double gamma,
                              double viscosity,
-                             const BlockSparseMatrix<double> &S,
-                             const SparseMatrix<double> &P,
+                             const dealii::TrilinosWrappers::BlockSparseMatrix &system_matrix,
+                             const dealii::TrilinosWrappers::BlockSparseMatrix &pressure_mass,
                              const PreconditionerMp &Mppreconditioner);
     void vmult(BlockVector<double> &dst, const BlockVector<double> &src) const;
 private:
     const double gamma;
     const double viscosity;
-    const BlockSparseMatrix<double> &stokes_matrix;
-    const SparseMatrix<double> &pressure_mass_matrix;
+    const dealii::TrilinosWrappers::BlockSparseMatrix &system_matrix;
+    const dealii::TrilinosWrappers::BlockSparseMatrix &pressure_mass;
     const PreconditionerMp &mp_preconditioner;
     SparseDirectUMFPACK A_inverse;
 };

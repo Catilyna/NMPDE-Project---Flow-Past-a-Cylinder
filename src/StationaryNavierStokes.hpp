@@ -93,12 +93,15 @@ namespace NavierStokes{
             const double alpha = 1.0;
         };
 
-        StationaryNavierStokes(const std::string &mesh_file_name_, unsigned int degree_ = 2)
-            : degree(degree_)
-            , mpi_size(Utilities::MPI::n_mpi_processes(MPI_COMM_WORLD))
+        StationaryNavierStokes(const std::string &mesh_file_name_,
+                            const unsigned int &degree_velocity_,
+                            const unsigned int &degree_pressure_)
+            : mpi_size(Utilities::MPI::n_mpi_processes(MPI_COMM_WORLD))
             , mpi_rank(Utilities::MPI::this_mpi_process(MPI_COMM_WORLD))
             , pcout(std::cout, mpi_rank == 0)
             , mesh_file_name(mesh_file_name_)
+            , degree_velocity(degree_velocity_)
+            , degree_pressure(degree_pressure_)
             , mesh(MPI_COMM_WORLD)
         {};
 
@@ -133,7 +136,9 @@ namespace NavierStokes{
         double viscosity = 1.;
         double p_out = 1.;
         double gamma;
-        const unsigned int degree;
+        const unsigned int degree_velocity;
+
+        const unsigned int degree_pressure;
 
         const unsigned int mpi_size;
 
@@ -183,6 +188,5 @@ namespace NavierStokes{
         BlockVector<double> evaluation_point;
 
         BlockVector<double> present_solution;
-        std::vector<IndexSet> block_relevant_dofs;
     };
 }; // namespace NavierStokes
