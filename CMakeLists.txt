@@ -9,9 +9,18 @@ find_package(deal.II REQUIRED HINTS ${DEAL_II_DIR} NO_DEFAULT_PATH)
 include(./common/cmake-common.cmake)
 
 add_executable(Stokes
-    src/main.cpp
+    src/test_stokes.cpp
     src/Stokes.cpp
     src/BoundaryValues.cpp
 )
+deal_ii_setup_target(Stokes)
 
-deal_ii_setup_target(NavierStokes)
+add_executable(StationaryNavierStokes
+    src/test_sns.cpp
+    src/StationaryNavierStokes.cpp
+    src/preconditioners/BlockSchurPreconditioner.cpp
+)
+
+deal_ii_setup_target(StationaryNavierStokes)
+
+

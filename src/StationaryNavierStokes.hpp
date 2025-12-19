@@ -110,6 +110,8 @@ namespace NavierStokes{
     private:
         void setup_dofs();
 
+        void setup_boundaries();
+
         void initialize_system();
 
         void assemble(const bool initial_step, const bool assemble_matrix);
@@ -122,7 +124,7 @@ namespace NavierStokes{
 
         void process_solution();
 
-        void output_results(const unsigned int refinement_cycle) const;
+        void output_results() const;
 
         void newton_iteration(const double tolerance,
                             const unsigned int max_n_line_searches,
@@ -131,20 +133,19 @@ namespace NavierStokes{
 
         void compute_initial_guess(double step_size);
 
+        // problem related values setup
         double viscosity = 1.;
         double p_out = 1.;
         double gamma;
         const unsigned int degree_velocity;
-
         const unsigned int degree_pressure;
 
+        // parallelization setup
         const unsigned int mpi_size;
-
         const unsigned int mpi_rank;
+        ConditionalOStream pcout;
 
         const std::string mesh_file_name;
-
-        ConditionalOStream pcout;
 
         InletVelocity inlet_velocity;
 
@@ -179,12 +180,11 @@ namespace NavierStokes{
         // following Bucelli's convention
         TrilinosWrappers::MPI::BlockVector solution_owned;
         TrilinosWrappers::MPI::BlockVector solution;
-        BlockVector<double> present_solution;
-
         TrilinosWrappers::MPI::BlockVector system_rhs;
-        BlockVector<double> newton_update;
 
-        BlockVector<double> evaluation_point;
-
+        // Usefull vectors used in newton update
+        TrilinosWrappers::MPI::BlockVector present_solution;
+        TrilinosWrappers::MPI::BlockVector newton_update;
+        TrilinosWrappers::MPI::BlockVector evaluation_point;
     };
 }; // namespace NavierStokes

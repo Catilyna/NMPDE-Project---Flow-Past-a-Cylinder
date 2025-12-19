@@ -1,11 +1,13 @@
 #pragma once
-#include <deal.II/lac/block_vector.h>
-#include <deal.II/lac/block_sparse_matrix.h>
-#include <deal.II/lac/sparse_matrix.h>
-#include <deal.II/lac/sparse_direct.h>
-#include <deal.II/lac/solver_cg.h>
-#include <deal.II/lac/precondition.h>
 #include <deal.II/base/subscriptor.h>
+#include <deal.II/lac/trilinos_parallel_block_vector.h>   
+#include <deal.II/lac/trilinos_vector.h>        
+#include <deal.II/lac/trilinos_sparse_matrix.h>  
+#include <deal.II/lac/trilinos_block_sparse_matrix.h> 
+#include <deal.II/lac/trilinos_precondition.h>   
+#include <deal.II/lac/solver_cg.h>               
+#include <deal.II/lac/solver_control.h>        
+#include <deal.II/lac/sparse_direct.h>  
 
 namespace NavierStokes {
 using namespace dealii;
@@ -18,13 +20,13 @@ public:
                              const dealii::TrilinosWrappers::BlockSparseMatrix &system_matrix,
                              const dealii::TrilinosWrappers::BlockSparseMatrix &pressure_mass,
                              const PreconditionerMp &Mppreconditioner);
-    void vmult(BlockVector<double> &dst, const BlockVector<double> &src) const;
+    void vmult(TrilinosWrappers::MPI::BlockVector &dst, const TrilinosWrappers::MPI::BlockVector &src) const;
 private:
     const double gamma;
     const double viscosity;
     const dealii::TrilinosWrappers::BlockSparseMatrix &system_matrix;
     const dealii::TrilinosWrappers::BlockSparseMatrix &pressure_mass;
     const PreconditionerMp &mp_preconditioner;
-    SparseDirectUMFPACK A_inverse;
+    TrilinosWrappers::PreconditionILU A_inverse;
 };
 } // namespace NavierStokes

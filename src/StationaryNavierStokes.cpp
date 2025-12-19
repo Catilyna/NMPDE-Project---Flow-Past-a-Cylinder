@@ -1,15 +1,10 @@
-#include "StationaryNavierStokes.hpp"
-#include "BoundaryValues.h"
 #include <fstream>
 #include <iomanip>
+#include "StationaryNavierStokes.hpp"
 #include "./preconditioners/BlockPrecondtioner.h"
-#include "./preconditioners/BlockSchurPreconditioner.h"
+#include "./preconditioners/BlockSchurPreconditioner.hpp"
 #include "./preconditioners/BlockTriangularPrecondition.hpp"
 #include "./preconditioners/PreconditionIdentity.h"
-#include <deal.II/numerics/solution_transfer.h>
-#include <deal.II/numerics/error_estimator.h>
-#include <deal.II/numerics/data_out.h>
-#include <deal.II/base/utilities.h>
 
 
 namespace NavierStokes{
@@ -33,9 +28,6 @@ namespace NavierStokes{
 			create_description_from_triangulation(mesh_serial, MPI_COMM_WORLD);
 			mesh.create_triangulation(construction_data);
 		}
-
-		setup_dofs();
-
 		// Initialization of the finite element space
 		const FE_SimplexP<dim> fe_scalar_velocity(degree_velocity);
 		const FE_SimplexP<dim> fe_scalar_pressure(degree_pressure);
@@ -51,9 +43,12 @@ namespace NavierStokes{
 		quadrature = std::make_unique<QGaussSimplex<dim>>(fe->degree + 1);
 		quadrature_face = std::make_unique<QGaussSimplex<dim - 1>>(fe->degree + 1);
 		pcout << "  Quadrature points per cell = " << quadrature->size()
-          << std::endl;
-		pcout << "  Quadrature points per face = " << quadrature_face->size()
-          << std::endl;
+		<< std::endl;
+		pcout << "  Quadrature points per face = " << quadrature_face->size() << std::endl;
+
+		// SETUP DOFS AND BOUNDARIES
+     	setup_dofs();
+		setup_boundaries();
 		
 		pcout << "  Initializing the sparsity pattern" << std::endl;
 
@@ -98,12 +93,13 @@ namespace NavierStokes{
 		pressure_mass.reinit(sparsity_pressure_mass);
 	
 		pcout << "  Initializing the solution vector" << std::endl;
-		present_solution.reinit(dofs_per_block);
-	
-		newton_update.reinit(dofs_per_block);
+		present_solution.reinit(block_owned_dofs, MPI_COMM_WORLD);
+		newton_update.reinit(block_owned_dofs, MPI_COMM_WORLD);
+		evaluation_point.reinit(block_owned_dofs, MPI_COMM_WORLD);
 	
 		pcout << "  Initializing the system right-hand side" << std::endl;
 		system_rhs.reinit(block_owned_dofs, MPI_COMM_WORLD);
+		
 		pcout << "  Initializing the solution vector" << std::endl;
 		solution_owned.reinit(block_owned_dofs, MPI_COMM_WORLD);
 		solution.reinit(block_owned_dofs, block_relevant_dofs, MPI_COMM_WORLD);
@@ -145,6 +141,55 @@ namespace NavierStokes{
 		// logic here is to take n_p elements from the n_u index and assign it to the second block
 		block_owned_dofs[1] = locally_owned_dofs.get_view(n_u, n_u + n_p);
 		block_relevant_dofs[1] = locally_relevant_dofs.get_view(n_u, n_u + n_p);
+
+	}
+
+	/** @brief Setup boundary conditions for each of the surfaces (inlet, walls, outlet)
+	 */
+	template<int dim>
+	void StationaryNavierStokes<dim>::setup_boundaries()
+	{
+		pcout << "Setup Boundaries." << std::endl;
+
+		nonzero_constraints.clear();
+    	DoFTools::make_hanging_node_constraints(dof_handler, nonzero_constraints);
+
+		std::map<types::boundary_id, const Function<dim> *> boundary_functions;
+		Functions::ZeroFunction<dim> zero_function(dim + 1);
+		FEValuesExtractors::Vector velocity(0);
+		ComponentMask velocity_mask = fe->component_mask(velocity);
+								
+		boundary_functions[0] = &inlet_velocity; 
+		
+		boundary_functions[1] = &zero_function;
+		boundary_functions[3] = &zero_function;
+
+		VectorTools::interpolate_boundary_values(dof_handler,
+												boundary_functions,
+												nonzero_constraints,
+												velocity_mask);
+		
+		nonzero_constraints.close();
+		zero_constraints.clear();
+		DoFTools::make_hanging_node_constraints(dof_handler, zero_constraints);
+
+		// Apply u = 0.0 to all Dirichlet boundaries
+		{			
+			// The Inlet is now set to zero cause we dont want newton to update it.
+			// We don't want to change the inlet velocity during an update.
+			boundary_functions[0] = &zero_function; 
+			
+			// Walls and Obstacles are also zero (obviously)
+			boundary_functions[1] = &zero_function;
+			boundary_functions[3] = &zero_function;
+
+			// we assign these 
+			VectorTools::interpolate_boundary_values(dof_handler,
+													boundary_functions,
+													zero_constraints,
+													velocity_mask);
+		}
+		zero_constraints.close();
 	}
 
 	
@@ -266,38 +311,6 @@ namespace NavierStokes{
 		system_matrix.compress(VectorOperation::add);
 		pressure_mass.compress(VectorOperation::add);
 		system_rhs.compress(VectorOperation::add);
-
-		// Dirichlet Boundary conditions
-		{
-			std::map<types::global_dof_index, double>           boundary_values;
-    		std::map<types::boundary_id, const Function<dim> *> boundary_functions;
-
-			//object that represents a sequence of booleans true for velocity and false for pressure
-			ComponentMask mask_velocity(dim + 1, true);
-			std::vector<bool> mask_values(dim + 1, true);
-			mask_values[dim] = false;
-			mask_velocity = ComponentMask(mask_values);
-
-			// set a zero function for the b.conditions on the wall
-			Functions::ZeroFunction<dim> zero_function(dim + 1);
-
-			boundary_functions[0] = &inlet_velocity; // boundary id zero means inlet
-			VectorTools::interpolate_boundary_values(dof_handler,
-				boundary_functions,
-				boundary_values,
-				mask_velocity);
-			
-			// in this way wall wins (Bucelli explain why we do this)
-			boundary_functions.clear();
-			boundary_functions[1] = &zero_function;
-			VectorTools::interpolate_boundary_values(dof_handler,
-				boundary_functions,
-				boundary_values,
-				mask_velocity);
-
-			MatrixTools::apply_boundary_values(
-      			boundary_values, system_matrix, solution_owned, system_rhs, false);
-		}
 	}
 	
 	template <int dim>
@@ -320,7 +333,7 @@ namespace NavierStokes{
 	
 		// initialize object for solving the system
 		SolverControl solver_control(system_matrix.m(), 1e-4 * system_rhs.l2_norm(), true);
-		SolverFGMRES<BlockVector<double>> gmres(solver_control);
+		SolverFGMRES<TrilinosWrappers::MPI::BlockVector> gmres(solver_control);
 		
 		// initialize ILU preconditioner with the pressure mass matrix we derived in the assemble() function
 		TrilinosWrappers::PreconditionILU pmass_preconditioner;
@@ -332,10 +345,10 @@ namespace NavierStokes{
 		
 		// solve using the Shur Preconditioner
 		gmres.solve(system_matrix, newton_update, system_rhs, preconditioner);
-		std::cout << "FGMRES steps: " << solver_control.last_step() << std::endl;
+		pcout << "FGMRES steps: " << solver_control.last_step() << std::endl;
 		constraints_used.distribute(newton_update);
 
-		solution = newton_update; // is this correct?
+		solution = newton_update; // update owned and ghost dofs
 	}
 	
 	/** @brief Function identifies area where the error is larger and refines the mesh
@@ -397,7 +410,6 @@ namespace NavierStokes{
 		while ((first_step || (current_res > tolerance)) && line_search_n < max_n_line_searches) {
 			if (first_step) {
 				// initialize and assemble the system in the first iter
-				setup_dofs();
 				initialize_system();
 				evaluation_point = present_solution;
 				assemble_system(first_step);
@@ -405,11 +417,11 @@ namespace NavierStokes{
 				solve(first_step);
 				present_solution = newton_update;
 				nonzero_constraints.distribute(present_solution);
-				first_step = false;
+				first_step = false; // ensure we do not call this routine again 
 				evaluation_point = present_solution;
 				assemble_rhs(first_step);
 				current_res = system_rhs.l2_norm();
-				std::cout << "The residual of initial guess is " << current_res << std::endl;
+				pcout << "The residual of initial guess is " << current_res << std::endl;
 				last_res = current_res;
 			} else {
 				evaluation_point = present_solution;
@@ -421,26 +433,28 @@ namespace NavierStokes{
 				for (double alpha = 1.0; alpha > 1e-5; alpha *= 0.5) {
 					evaluation_point = present_solution;
 					evaluation_point.add(alpha, newton_update);
+					solution = evaluation_point; // we must pass the information to ghost dofs aswell
+
 					nonzero_constraints.distribute(evaluation_point);
+
 					assemble_rhs(first_step);
 					current_res = system_rhs.l2_norm();
-					std::cout << "  alpha: " << std::setw(10) << alpha << std::setw(0) << "  residual: " << current_res << std::endl;
+					pcout << "  alpha: " << std::setw(10) << alpha << std::setw(0) << "  residual: " << current_res << std::endl;
 					if (current_res < last_res)
 						break;
 				}
 				{
 					present_solution = evaluation_point;
-					std::cout << "  number of line searches: " << line_search_n << "  residual: " << current_res << std::endl;
+					pcout << "  number of line searches: " << line_search_n << "  residual: " << current_res << std::endl;
 					last_res = current_res;
 				}
 				++line_search_n; // increment line search number
 			}
-				/*
-				if (output_result) {
-					output_results(line_search_n);
-					if (current_res <= tolerance)
-						process_solution();
-				}*/ 
+		}
+		// output result decides wheter to store or not results.
+		if (output_result) {
+			output_results();
+			// process_solution(); no need for now of this function call
 		}
 	}
 	
@@ -455,8 +469,8 @@ namespace NavierStokes{
 		bool is_initial_step = true;
 		for (double Re = 1000.0; Re < target_Re; Re = std::min(Re + step_size, target_Re)) {
 			viscosity = 1.0 / Re;
-			std::cout << "Searching for initial guess with Re = " << Re << std::endl;
-			newton_iteration(1e-12, 50, 0, is_initial_step, false);
+			pcout << "Searching for initial guess with Re = " << Re << std::endl;
+			newton_iteration(1e-12, 50, is_initial_step, false);
 			is_initial_step = false;
 		}
 	}
@@ -495,9 +509,8 @@ namespace NavierStokes{
 											0,
 											MPI_COMM_WORLD);
 	
-		std::cout << "Output written to " << output_file_name << "." << std::endl;
+		pcout << "Output written to " << output_file_name << "." << std::endl;
 		pcout << "===============================================" << std::endl;
-
 	}
 	
 	/** @brief Function that it samples the velocity profile along the vertical centerline
@@ -533,24 +546,29 @@ namespace NavierStokes{
 	 *  an initial guess calling the "compute_initial_guess" function.
 	*/
 	template <int dim>
-	void StationaryNavierStokes<dim>::run(const unsigned int refinement)
+	void StationaryNavierStokes<dim>::run()
 	{
-		GridGenerator::hyper_cube(mesh);
-		mesh.refine_global(5);
+		// GridGenerator::hyper_cube(mesh); This generated an hypercube but this is not our case
+
+		//	This function here redefines each cell for each time you specify the 'times'
+		//  argument. Actually we dont need it as our mesh is interpreted in parallel and 
+		//  it has already been computed by gmsh.
+		//  mesh.refine_global(1); 
+
 		const double Re = 1.0 / viscosity;
 		if (Re > 1000.0) {
-			std::cout << "Searching for initial guess ..." << std::endl;
+			pcout << "Searching for initial guess ..." << std::endl;
 			const double step_size = 2000.0;
 			compute_initial_guess(step_size);
-			std::cout << "Found initial guess." << std::endl;
-			std::cout << "Computing solution with target Re = " << Re << std::endl;
+			pcout << "Found initial guess." << std::endl;
+			pcout << "Computing solution with target Re = " << Re << std::endl;
 			viscosity = 1.0 / Re;
-			newton_iteration(1e-12, 50, refinement, false, true);
+			newton_iteration(1e-12, 50, false, true);
 		} else {
-			newton_iteration(1e-12, 50, refinement, true, true);
+			newton_iteration(1e-12, 50, true, true);
 		}
 	}
 	
 	// Explicit instantiation for dim=2
-	template class StationaryNavierStokes<2>;	
-};// namespace NavierStokes
+	template class StationaryNavierStokes<3>;	
+};
