@@ -62,19 +62,22 @@ class Mesh3D:
             # Get the bounding box of the surface to determine its position
             bbox = gmsh.model.getBoundingBox(2, tag)
             # Logic to identify surfaces:            # bbox = [xmin, ymin, zmin, xmax, ymax, zmax]
-
             
             # tries to identify each surface given the values stored in com
-            if abs(bbox[0] - 0.0) < eps:
+            
+            # Identify the Inlet
+            if abs(bbox[0] - 0.0) < eps and abs(bbox[3] - 0.0) < eps:
                 inlet_tag.append(tag)
                 
-            # Plane at x = L
-            elif abs(bbox[0] - self.L) < eps:
+            # Identify the Outlet
+            elif abs(bbox[0] - self.L) < eps and abs(bbox[3] - self.L) < eps:
                 outlet_tag.append(tag)
                 
             # Checks wheter y=0 or y=H or z=0 or z=W
-            elif (abs(bbox[1] - 0.0) < eps or abs(bbox[1] - self.H) < eps or
-                  abs(bbox[2] - 0.0) < eps or abs(bbox[2] - self.W) < eps):
+            elif ( (abs(bbox[1]) < eps and abs(bbox[4]) < eps) or       # Bottom (y=0)
+                   (abs(bbox[1] - self.H) < eps and abs(bbox[4] - self.H) < eps) or   # Top (y=H)
+                   (abs(bbox[2]) < eps and abs(bbox[5]) < eps) or       # Front (z=0)
+                   (abs(bbox[2] - self.W) < eps and abs(bbox[5] - self.W) < eps) ):   # Back (z=W)
                 walls_tags.append(tag)
             
             # If it's not the outer box, it must be the cylinder surface inside
@@ -124,7 +127,7 @@ class Mesh3D:
         
         gmsh.model.mesh.generate(3)
         
-        output_dir = "./mesh"
+        output_dir = "../mesh"
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
             

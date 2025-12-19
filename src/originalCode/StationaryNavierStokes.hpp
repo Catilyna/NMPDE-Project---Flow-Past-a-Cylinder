@@ -47,6 +47,7 @@
 #include <deal.II/lac/sparse_ilu.h>
 
 #include <deal.II/distributed/fully_distributed_tria.h>
+#include <deal.II/distributed/solution_transfer.h>
 #include <fstream>
 #include <iostream>
 #include <vector>
@@ -181,12 +182,12 @@ namespace NavierStokes{
         // following Bucelli's convention
         TrilinosWrappers::MPI::BlockVector solution_owned;
         TrilinosWrappers::MPI::BlockVector solution;
+        BlockVector<double> present_solution;
 
         TrilinosWrappers::MPI::BlockVector system_rhs;
         BlockVector<double> newton_update;
 
         BlockVector<double> evaluation_point;
 
-        BlockVector<double> present_solution;
     };
 }; // namespace NavierStokes

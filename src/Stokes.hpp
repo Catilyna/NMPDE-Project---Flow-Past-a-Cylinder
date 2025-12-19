@@ -58,22 +58,23 @@ public:
     virtual void
     vector_value(const Point<dim> &p, Vector<double> &values) const override
     {
-      values[0] = -alpha * p[1] * (2.0 - p[1]) * (1.0 - p[2]) * (2.0 - p[2]);
+      values[0] = 1.0;
 
       for (unsigned int i = 1; i < dim + 1; ++i)
-        values[i] = 0.0;
+        values[i] = 0.0 + p[0] * 0.0;
     }
 
     virtual double
     value(const Point<dim> &p, const unsigned int component = 0) const override
     {
       if (component == 0)
-        return -alpha * p[1] * (2.0 - p[1]) * (1.0 - p[2]) * (2.0 - p[2]);
-      else
+        return 1.0 + p[0] * 0.0; // added jsut because I didnt want warning by compiler
+      else 
         return 0.0;
     }
 
   protected:
+  // set this as we want
     const double alpha = 1.0;
   };
 

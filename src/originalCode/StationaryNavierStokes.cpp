@@ -331,34 +331,29 @@ namespace NavierStokes{
 	
 	/** @brief Function identifies area where the error is larger and refines the mesh
 	 *  in order to create new cells there
-	 */
+	 
 	template <int dim>
 	void StationaryNavierStokes<dim>::refine_mesh()
 	{
 		// error estimation
 		Vector<float> estimated_error_per_cell(mesh.n_active_cells());
 		const FEValuesExtractors::Vector velocity(0);
-		KellyErrorEstimator<dim>::estimate(dof_handler, QGauss<dim - 1>(degree_velocity + degree_pressure + 1), std::map<types::boundary_id, const Function<dim> *>(), present_solution, estimated_error_per_cell, fe->component_mask(velocity));
+		KellyErrorEstimator<dim>::estimate(dof_handler, 
+										QGauss<dim - 1>(degree_velocity + degree_pressure + 1), 
+										std::map<types::boundary_id, 
+										const Function<dim> *>(), 
+										present_solution, 
+										estimated_error_per_cell, 
+										fe->component_mask(velocity));
 	
 		// here it takes the 0.3 (30%) of the cells with the highest error from the mesh for refinement
 		GridRefinement::refine_and_coarsen_fixed_number(mesh, estimated_error_per_cell, 0.3, 0.0);
 		mesh.prepare_coarsening_and_refinement();
-
-		Vector<double> flat_present_solution(dof_handler.n_dofs());
-
-		// Copy block-wise data into the flat vector
-		long unsigned int index = 0;
-		for (size_t b = 0; b < present_solution.n_blocks(); ++b) {
-			for (size_t i = 0; i < present_solution.block(b).size(); ++i) {
-				// store the block b into the flat present solution vector
-				flat_present_solution(index++) = present_solution.block(b)(i);
-			}
-   	    }
 	
 		// creating new points means it is necessary to add more dof.
 		// This also means we need to store somewhere the solutiuon computed so far
-		SolutionTransfer<dim, Vector<double>> solution_transfer(dof_handler);
-		solution_transfer.prepare_for_coarsening_and_refinement(flat_present_solution);
+		parallel::distributed::SolutionTransfer<dim, TrilinosWrappers::MPI::BlockVector> solution_transfer(dof_handler);
+		solution_transfer.prepare_for_coarsening_and_refinement(present_solution);
 		mesh.execute_coarsening_and_refinement();
 	
 		// redefines dof
@@ -367,18 +362,16 @@ namespace NavierStokes{
 		initialize_system();
 	
 		// interpolating on the new mesh
-		Vector<double> flat_tmp(dof_handler.n_dofs());
-		solution_transfer.interpolate(flat_tmp);
-		nonzero_constraints.distribute(flat_tmp);
-		index = 0;
-		for (unsigned int b = 0; b < present_solution.n_blocks(); ++b) {
-			for (unsigned int i = 0; i < present_solution.block(b).size(); ++i) {
-				// save the solution back to the present solution 
-				present_solution.block(b)(i) = flat_tmp(index++);
-			}
-    	}
+		TrilinosWrappers::MPI::BlockVector tmp_solution;
+		tmp_solution.reinit(present_solution,
+							MPI_COMM_WORLD);
+
+		solution_transfer.interpolate(tmp_solution);
+		nonzero_constraints.distribute(tmp_solution);
+		
+		present_solution = tmp_solution;
 	}
-	
+	*/
 	/** @brief We use the Newton method in order to solve a nonlinear system like
 	 * 	this one 
 	 */

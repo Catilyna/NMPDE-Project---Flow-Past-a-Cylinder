@@ -1,10 +1,23 @@
-#include "StationaryNavierStokes.hpp"
+#include "Stokes.hpp"
+#include "originalCode/StationaryNavierStokes.hpp"
 #include <iostream>
 
-int main() {
+int main(int argc, char* argv[]) {
     using namespace NavierStokes;
-    try {
-        StationaryNavierStokes<2> flow(/*mesh_file_name=*/"../mesh/mesh2D_example.msh", 2, 1);
+    Utilities::MPI::MPI_InitFinalize mpi_init(argc, argv);
+
+    const std::string  mesh_file_name  = "../mesh/mesh3D_example.msh";
+    const unsigned int degree_velocity = 2;
+    const unsigned int degree_pressure = 1;
+
+    Stokes problem(mesh_file_name, degree_velocity, degree_pressure);
+
+    problem.setup();
+    problem.assemble();
+    problem.solve();
+    problem.output();
+    /*try {
+        StationaryNavierStokes<2> flow(mesh_file_name="../mesh/mesh2D_example.msh", 2, 1);
         flow.run(4);
     } catch (std::exception &exc) {
         std::cerr << std::endl << std::endl
@@ -21,6 +34,6 @@ int main() {
                   << "Aborting!" << std::endl
                   << "----------------------------------------------------" << std::endl;
         return 1;
-    }
+    }*/
     return 0;
 }

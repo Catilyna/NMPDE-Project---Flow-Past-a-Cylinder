@@ -10,9 +10,8 @@ include(./common/cmake-common.cmake)
 
 add_executable(NavierStokes
     src/main.cpp
-    src/StationaryNavierStokes.cpp
+    src/Stokes.cpp
     src/BoundaryValues.cpp
-    src/preconditioners/BlockSchurPreconditioner.cpp
 )
 
 deal_ii_setup_target(NavierStokes)

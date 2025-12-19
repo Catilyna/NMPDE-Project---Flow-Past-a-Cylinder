@@ -1,4 +1,5 @@
 #include "Stokes.hpp"
+#include "BoundaryValues.h"
 
 void
 Stokes::setup()
@@ -28,9 +29,12 @@ Stokes::setup()
 
   // Initialize the finite element space.
   {
-    pcout << "Initializing the finite element space" << std::endl;
-
-    // TODO: setup FE space.
+    const FE_SimplexP<dim> fe_scalar_velocity(degree_velocity);
+    const FE_SimplexP<dim> fe_scalar_pressure(degree_pressure);
+    fe = std::make_unique<FESystem<dim>>(fe_scalar_velocity,
+                                         dim,
+                                         fe_scalar_pressure,
+                                         1);
 
     pcout << "  Velocity degree:           = " << fe_scalar_velocity.degree
           << std::endl;
@@ -54,8 +58,6 @@ Stokes::setup()
 
   // Initialize the DoF handler.
   {
-    pcout << "Initializing the DoF handler" << std::endl;
-
     dof_handler.reinit(mesh);
     dof_handler.distribute_dofs(*fe);
 
@@ -139,13 +141,11 @@ Stokes::setup()
                                     sparsity_pressure_mass);
     sparsity_pressure_mass.compress();
 
-    pcout << "  Initializing the matrices" << std::endl;
     system_matrix.reinit(sparsity);
     pressure_mass.reinit(sparsity_pressure_mass);
 
-    pcout << "  Initializing the system right-hand side" << std::endl;
     system_rhs.reinit(block_owned_dofs, MPI_COMM_WORLD);
-    pcout << "  Initializing the solution vector" << std::endl;
+    // pcout << "  Initializing the solution vector" << std::endl;
     solution_owned.reinit(block_owned_dofs, MPI_COMM_WORLD);
     solution.reinit(block_owned_dofs, block_relevant_dofs, MPI_COMM_WORLD);
   }
@@ -200,8 +200,30 @@ Stokes::assemble()
             {
               for (unsigned int j = 0; j < dofs_per_cell; ++j)
                 {
-                  // TODO
+                  // Viscosity term.
+                  cell_matrix(i, j) +=
+                    nu *
+                    scalar_product(fe_values[velocity].gradient(i, q),
+                                   fe_values[velocity].gradient(j, q)) *
+                    fe_values.JxW(q);
+
+                  // Pressure term in the momentum equation.
+                  cell_matrix(i, j) -= fe_values[velocity].divergence(i, q) *
+                                       fe_values[pressure].value(j, q) *
+                                       fe_values.JxW(q);
+
+                  // Pressure term in the continuity equation.
+                  cell_matrix(i, j) -= fe_values[velocity].divergence(j, q) *
+                                       fe_values[pressure].value(i, q) *
+                                       fe_values.JxW(q);
+
+                  // Pressure mass matrix.
+                  cell_pressure_mass_matrix(i, j) +=
+                    fe_values[pressure].value(i, q) *
+                    fe_values[pressure].value(j, q) / nu * fe_values.JxW(q);
                 }
+
+              // There is no forcing term.
             }
         }
 
@@ -219,7 +241,12 @@ Stokes::assemble()
                     {
                       for (unsigned int i = 0; i < dofs_per_cell; ++i)
                         {
-                          // TODO
+                          cell_rhs(i) +=
+                            -p_out *
+                            scalar_product(fe_face_values.normal_vector(q),
+                                           fe_face_values[velocity].value(i,
+                                                                          q)) *
+                            fe_face_values.JxW(q);
                         }
                     }
                 }
@@ -242,7 +269,22 @@ Stokes::assemble()
     std::map<types::global_dof_index, double>           boundary_values;
     std::map<types::boundary_id, const Function<dim> *> boundary_functions;
 
-    // TODO
+    ComponentMask mask_velocity(dim + 1, true);
+    mask_velocity.set(dim, false);
+
+    boundary_functions[0] = &inlet_velocity;
+    VectorTools::interpolate_boundary_values(dof_handler,
+                                             boundary_functions,
+                                             boundary_values,
+                                             mask_velocity);
+
+    boundary_functions.clear();
+    Functions::ZeroFunction<dim> zero_function(dim + 1);
+    boundary_functions[1] = &zero_function;
+    VectorTools::interpolate_boundary_values(dof_handler,
+                                             boundary_functions,
+                                             boundary_values,
+                                             mask_velocity);
 
     MatrixTools::apply_boundary_values(
       boundary_values, system_matrix, solution_owned, system_rhs, false);
@@ -258,9 +300,11 @@ Stokes::solve()
 
   SolverGMRES<TrilinosWrappers::MPI::BlockVector> solver(solver_control);
 
-  // TODO: preconditioner
+  PreconditionBlockTriangular preconditioner;
+  preconditioner.initialize(system_matrix.block(0, 0),
+                            pressure_mass.block(1, 1),
+                            system_matrix.block(1, 0));
 
-  pcout << "Solving the linear system" << std::endl;
   solver.solve(system_matrix, solution_owned, system_rhs, preconditioner);
   pcout << "  " << solver_control.last_step() << " GMRES iterations"
         << std::endl;
