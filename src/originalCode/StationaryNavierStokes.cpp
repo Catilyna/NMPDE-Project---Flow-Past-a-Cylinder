@@ -34,6 +34,8 @@ namespace NavierStokes{
 			mesh.create_triangulation(construction_data);
 		}
 
+		setup_dofs();
+
 		// Initialization of the finite element space
 		const FE_SimplexP<dim> fe_scalar_velocity(degree_velocity);
 		const FE_SimplexP<dim> fe_scalar_pressure(degree_pressure);
@@ -52,38 +54,6 @@ namespace NavierStokes{
           << std::endl;
 		pcout << "  Quadrature points per face = " << quadrature_face->size()
           << std::endl;
-
-		pcout << "Initializing the DoF handler." << std::endl;
-
-		dof_handler.reinit(mesh);
-		dof_handler.distribute_dofs(*fe);
-
-		// enforce a specific ordering for the dofs. (I need this order to be respected)
-		// block component has values 0 and 1 where:
-		//     - 0 means velocity dof
-		//     - 1 means pressure dof
-		std::vector<unsigned int> block_component(dim + 1, 0);
-		block_component[dim] = 1;
-		DoFRenumbering::component_wise(dof_handler, block_component);
-
-		locally_owned_dofs = dof_handler.locally_owned_dofs();
-		locally_relevant_dofs = DoFTools::extract_locally_relevant_dofs(dof_handler);
-
-		// now get the block dofs for velocity and pressure
-		std::vector<types::global_dof_index> dofs_per_block = DoFTools::count_dofs_per_fe_block(dof_handler, block_component);
-		const unsigned int n_u = dofs_per_block[0]; 
-		const unsigned int n_p = dofs_per_block[1]; 
-
-		block_owned_dofs.resize(2);
-		block_relevant_dofs.resize(2);
-
-		// get_view gives back a subset of elements of a vector
-		block_owned_dofs[0] = locally_owned_dofs.get_view(0, n_u);
-		block_relevant_dofs[0] = locally_relevant_dofs.get_view(0, n_u);
-		
-		// logic here is to take n_p elements from the n_u index and assign it to the second block
-		block_owned_dofs[1] = locally_owned_dofs.get_view(n_u, n_u + n_p);
-		block_relevant_dofs[1] = locally_relevant_dofs.get_view(n_u, n_u + n_p);
 		
 		pcout << "  Initializing the sparsity pattern" << std::endl;
 
@@ -138,6 +108,45 @@ namespace NavierStokes{
 		solution_owned.reinit(block_owned_dofs, MPI_COMM_WORLD);
 		solution.reinit(block_owned_dofs, block_relevant_dofs, MPI_COMM_WORLD);
 	}
+
+	/** @brief Function that setups the Dof handler for the Stationary Navier Stokes solver. 
+	 */
+	template<int dim>
+	void StationaryNavierStokes<dim>::setup_dofs()
+	{
+		pcout << "Initializing the DoF handler." << std::endl;
+
+		dof_handler.reinit(mesh);
+		dof_handler.distribute_dofs(*fe);
+
+		// enforce a specific ordering for the dofs. (I need this order to be respected)
+		// block component has values 0 and 1 where:
+		//     - 0 means velocity dof
+		//     - 1 means pressure dof
+		std::vector<unsigned int> block_component(dim + 1, 0);
+		block_component[dim] = 1;
+		DoFRenumbering::component_wise(dof_handler, block_component);
+
+		locally_owned_dofs = dof_handler.locally_owned_dofs();
+		locally_relevant_dofs = DoFTools::extract_locally_relevant_dofs(dof_handler);
+
+		// now get the block dofs for velocity and pressure
+		std::vector<types::global_dof_index> dofs_per_block = DoFTools::count_dofs_per_fe_block(dof_handler, block_component);
+		const unsigned int n_u = dofs_per_block[0]; 
+		const unsigned int n_p = dofs_per_block[1]; 
+
+		block_owned_dofs.resize(2);
+		block_relevant_dofs.resize(2);
+
+		// get_view gives back a subset of elements of a vector
+		block_owned_dofs[0] = locally_owned_dofs.get_view(0, n_u);
+		block_relevant_dofs[0] = locally_relevant_dofs.get_view(0, n_u);
+		
+		// logic here is to take n_p elements from the n_u index and assign it to the second block
+		block_owned_dofs[1] = locally_owned_dofs.get_view(n_u, n_u + n_p);
+		block_relevant_dofs[1] = locally_relevant_dofs.get_view(n_u, n_u + n_p);
+	}
+
 	
 	/** @brief Assembles the whole system. (too lazy) */
 	template <int dim>
@@ -372,6 +381,7 @@ namespace NavierStokes{
 		present_solution = tmp_solution;
 	}
 	*/
+
 	/** @brief We use the Newton method in order to solve a nonlinear system like
 	 * 	this one 
 	 */
@@ -430,7 +440,7 @@ namespace NavierStokes{
 				if (output_result) {
 					output_results(max_n_line_searches * refinement_n + line_search_n);
 					if (current_res <= tolerance)
-						process_solution(refinement_n);
+						process_solution();
 				}
 			}
 			if (refinement_n < max_n_refinements) {
@@ -474,9 +484,12 @@ namespace NavierStokes{
 		data_out.add_data_vector(present_solution, solution_names, DataOut<dim>::type_dof_data, data_component_interpretation);
 		data_out.build_patches();
 	
+		// here to insert correct ReyNolds Number aswell REMEMBER THIS 
 		const std::string output_file_name = std::to_string(1.0 / viscosity) + "-solution";
-		std::ofstream output(output_file_name + Utilities::int_to_string(output_index, 4) + ".vtk");
-		data_out.write_vtk(output);
+		data_out.write_vtu_with_pvtu_record("../results",
+                                      output_file_name,
+                                      0,
+                                      MPI_COMM_WORLD);
 	
 		std::cout << "Output written to " << output_file_name << "." << std::endl;
 	}
@@ -485,9 +498,10 @@ namespace NavierStokes{
 	 *  of the domain and writes it to a text file. Usefull for testing and validation purposes.
 	 */
 	template <int dim>
-	void StationaryNavierStokes<dim>::process_solution(unsigned int refinement)
+	void StationaryNavierStokes<dim>::process_solution()
 	{
-		std::ofstream f(std::to_string(1.0 / viscosity) + "-line-" + std::to_string(refinement) + ".txt");
+		// here Reynolds number to insert of course REMEMBER THIS 
+		std::ofstream f(std::to_string(1.0 / viscosity) + "-line-" + ".txt");
 		f << "# y u_x u_y" << std::endl;
 		Point<dim> p;
 		p[0] = 0.5;

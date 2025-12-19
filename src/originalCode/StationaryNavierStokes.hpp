@@ -78,15 +78,15 @@ namespace NavierStokes{
             values[0] = 1.0;
 
             for (unsigned int i = 1; i < dim + 1; ++i)
-                values[i] = 0.0;
+                values[i] = 0.0 + p[0] * 0.0;
             }
 
             virtual double
             value(const Point<dim> &p, const unsigned int component = 0) const override
             {
             if (component == 0)
-                return 1.0;
-            else
+                return 1.0 + p[0] * 0.0; // added jsut because I didnt want warning by compiler
+            else 
                 return 0.0;
             }
 
@@ -106,7 +106,7 @@ namespace NavierStokes{
             , mesh(MPI_COMM_WORLD)
         {};
 
-        void run(const unsigned int refinement);
+        void run();
     private:
         void setup_dofs();
 
@@ -120,15 +120,12 @@ namespace NavierStokes{
 
         void solve(const bool initial_step);
 
-        void refine_mesh();
-
-        void process_solution(unsigned int refinement);
+        void process_solution();
 
         void output_results(const unsigned int refinement_cycle) const;
 
         void newton_iteration(const double tolerance,
                             const unsigned int max_n_line_searches,
-                            const unsigned int max_n_refinements,
                             const bool is_initial_step,
                             const bool output_result);
 

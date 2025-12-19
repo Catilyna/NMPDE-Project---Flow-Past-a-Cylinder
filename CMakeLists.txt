@@ -8,7 +8,7 @@ find_package(deal.II REQUIRED HINTS ${DEAL_II_DIR} NO_DEFAULT_PATH)
 
 include(./common/cmake-common.cmake)
 
-add_executable(NavierStokes
+add_executable(Stokes
     src/main.cpp
     src/Stokes.cpp
     src/BoundaryValues.cpp
