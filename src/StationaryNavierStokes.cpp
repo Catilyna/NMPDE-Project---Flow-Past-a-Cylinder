@@ -52,21 +52,21 @@ namespace NavierStokes{
 		
 		pcout << "  Initializing the sparsity pattern" << std::endl;
 
+
 		Table<2, DoFTools::Coupling> coupling(dim + 1, dim + 1);
 		for (unsigned int c = 0; c < dim + 1; ++c)
 		{
 			for (unsigned int d = 0; d < dim + 1; ++d)
 			{
 				if (c == dim && d == dim) // pressure-pressure term do not appear in the equations
-				coupling[c][d] = DoFTools::none;
+					coupling[c][d] = DoFTools::none;
 				else // other combinations
-				coupling[c][d] = DoFTools::always;
+					coupling[c][d] = DoFTools::always;
 			}
 		}
 
-		TrilinosWrappers::BlockSparsityPattern sparsity(block_owned_dofs,
-														MPI_COMM_WORLD);
-		DoFTools::make_sparsity_pattern(dof_handler, coupling, sparsity);
+		sparsity_pattern.reinit(block_owned_dofs, MPI_COMM_WORLD);
+		DoFTools::make_sparsity_pattern(dof_handler, coupling, sparsity_pattern);
 		sparsity_pattern.compress();
 
 		// We also build a sparsity pattern for the pressure mass matrix.
@@ -162,6 +162,7 @@ namespace NavierStokes{
 		boundary_functions[0] = &inlet_velocity; 
 		
 		boundary_functions[1] = &zero_function;
+		boundary_functions[2] = &zero_function; // TODO: check if this is necessary
 		boundary_functions[3] = &zero_function;
 
 		VectorTools::interpolate_boundary_values(dof_handler,
@@ -181,6 +182,7 @@ namespace NavierStokes{
 			
 			// Walls and Obstacles are also zero (obviously)
 			boundary_functions[1] = &zero_function;
+			boundary_functions[2] = &zero_function; //TODO: check if this is necessary
 			boundary_functions[3] = &zero_function;
 
 			// we assign these 
@@ -197,6 +199,7 @@ namespace NavierStokes{
 	template <int dim>
 	void StationaryNavierStokes<dim>::assemble(const bool initial_step, const bool assemble_matrix)
 	{
+		
 		if (assemble_matrix)
 			system_matrix = 0;
 		system_rhs = 0;
@@ -207,7 +210,8 @@ namespace NavierStokes{
 	
 		FEFaceValues<dim> fe_face_values(*fe, *quadrature_face, update_values | update_normal_vectors | 
 													update_JxW_values);
-
+		
+		
 		// usefull values referring to dofs and quadrature points
 		const unsigned int dofs_per_cell = fe->n_dofs_per_cell();
 		const unsigned int n_q_points = quadrature->size();
@@ -232,7 +236,8 @@ namespace NavierStokes{
 		std::vector<Tensor<1, dim>> phi_u(dofs_per_cell);       // velocity 
 		std::vector<Tensor<2, dim>> grad_phi_u(dofs_per_cell);  // gradient of velocity
 		std::vector<double> phi_p(dofs_per_cell);               // pressure
-	
+		
+
 		for (const auto &cell : dof_handler.active_cell_iterators()) {
 			if(!cell->is_locally_owned()) continue;
 
@@ -277,6 +282,7 @@ namespace NavierStokes{
 									* fe_values.JxW(q);
 				}
 			}
+
 			// boundary conditions
 			if(cell->at_boundary()){
 				for(size_t f = 0; f < cell->n_faces();++f){
@@ -300,6 +306,24 @@ namespace NavierStokes{
 			// this object here holds a list on constraint based on the fact wheter
 			// this is the initial step or not.
 			const AffineConstraints<double> &constraints_used = initial_step ? nonzero_constraints : zero_constraints;
+			
+			/* Debug prints for segmentation fault investigation
+			pcout << "[DEBUG] local_matrix size: " << local_matrix.m() << "x" << local_matrix.n() << std::endl;
+			pcout << "[DEBUG] local_rhs size: " << local_rhs.size() << std::endl;
+			pcout << "[DEBUG] local_dof_indices size: " << local_dof_indices.size() << std::endl;
+			pcout << "[DEBUG] First 10 local_dof_indices: ";
+			for (size_t dbg_i = 0; dbg_i < std::min<size_t>(10, local_dof_indices.size()); ++dbg_i) {
+				pcout << local_dof_indices[dbg_i] << " ";
+			}
+			pcout << std::endl;
+			// Print min/max of local_dof_indices
+			auto minmax = std::minmax_element(local_dof_indices.begin(), local_dof_indices.end());
+			pcout << "[DEBUG] local_dof_indices min: " << *minmax.first << ", max: " << *minmax.second << std::endl;
+			// Print global system matrix/vector sizes
+			pcout << "[DEBUG] system_matrix.m(): " << system_matrix.m() << ", n(): " << system_matrix.n() << std::endl;
+			pcout << "[DEBUG] system_rhs.size(): " << system_rhs.size() << std::endl;
+			*/
+			
 			if (assemble_matrix) {
 				constraints_used.distribute_local_to_global(local_matrix, local_rhs, local_dof_indices, system_matrix, system_rhs);
 			} else {
