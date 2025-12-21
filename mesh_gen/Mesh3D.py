@@ -85,7 +85,7 @@ class Mesh3D:
                 obstacle_tags.append(tag)
 
         # Create Physical Groups (Crucial for deal.II)
-        # 1: Inlet, 2: Outlet, 3: Walls, 4: Obstacle
+        # 0: Inlet, 1: Outlet, 2: Walls, 3: Obstacle
         if inlet_tag: gmsh.model.addPhysicalGroup(2, inlet_tag, 0, name="Inlet")
         if outlet_tag: gmsh.model.addPhysicalGroup(2, outlet_tag, 1, name="Outlet")
         if walls_tags: gmsh.model.addPhysicalGroup(2, walls_tags, 2, name="Walls")
