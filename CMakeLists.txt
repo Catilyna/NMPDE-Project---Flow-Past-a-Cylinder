@@ -19,6 +19,7 @@ add_executable(StationaryNavierStokes
     src/test_sns.cpp
     src/StationaryNavierStokes.cpp
     src/preconditioners/BlockSchurPreconditioner.cpp
+    src/preconditioners/BlockTriangularPrecondition.cpp
 )
 
 deal_ii_setup_target(StationaryNavierStokes)

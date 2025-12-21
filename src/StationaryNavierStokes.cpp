@@ -159,11 +159,10 @@ namespace NavierStokes{
 		FEValuesExtractors::Vector velocity(0);
 		ComponentMask velocity_mask = fe->component_mask(velocity);
 								
-		boundary_functions[0] = &inlet_velocity; 
-		
-		boundary_functions[1] = &zero_function;
-		boundary_functions[2] = &zero_function; // TODO: check if this is necessary
-		boundary_functions[3] = &zero_function;
+		boundary_functions[0] = &inlet_velocity; // Inlet velocity
+											     // no velocity set at the outlet	
+		boundary_functions[2] = &zero_function;  // Walls
+		boundary_functions[3] = &zero_function;  // Obstacle
 
 		VectorTools::interpolate_boundary_values(dof_handler,
 												boundary_functions,
@@ -181,8 +180,7 @@ namespace NavierStokes{
 			boundary_functions[0] = &zero_function; 
 			
 			// Walls and Obstacles are also zero (obviously)
-			boundary_functions[1] = &zero_function;
-			boundary_functions[2] = &zero_function; //TODO: check if this is necessary
+			boundary_functions[2] = &zero_function;
 			boundary_functions[3] = &zero_function;
 
 			// we assign these 
@@ -192,6 +190,22 @@ namespace NavierStokes{
 													velocity_mask);
 		}
 		zero_constraints.close();
+
+		// Fix pressure at one DoF to remove null space 
+		// Maybe we need mean zero condition? We are not using Neummann BC, so maybe
+		// we should indeed use L2_0 mean zero condition.
+		std::vector<bool> pressure_components(dim + 1, false);
+		pressure_components[dim] = true; // pressure is last component
+		ComponentMask pressure_mask(pressure_components);
+
+		IndexSet pressure_dofs = DoFTools::extract_dofs(dof_handler, pressure_mask);
+		if (pressure_dofs.n_elements() > 0) {
+		    const auto first_pressure_dof = pressure_dofs.nth_index_in_set(0);
+		    nonzero_constraints.add_line(first_pressure_dof);
+		    nonzero_constraints.set_inhomogeneity(first_pressure_dof, 0.0);
+		    zero_constraints.add_line(first_pressure_dof);
+		    zero_constraints.set_inhomogeneity(first_pressure_dof, 0.0);
+		}
 	}
 
 	
@@ -201,7 +215,7 @@ namespace NavierStokes{
 	{
 		
 		if (assemble_matrix)
-			system_matrix = 0;
+		system_matrix = 0;
 		system_rhs = 0;
 		pressure_mass = 0;
 	
@@ -359,14 +373,24 @@ namespace NavierStokes{
 		SolverControl solver_control(system_matrix.m(), 1e-4 * system_rhs.l2_norm(), true);
 		SolverFGMRES<TrilinosWrappers::MPI::BlockVector> gmres(solver_control);
 		
-		// initialize ILU preconditioner with the pressure mass matrix we derived in the assemble() function
+		/*// initialize ILU preconditioner with the pressure mass matrix we derived in the assemble() function
 		TrilinosWrappers::PreconditionILU pmass_preconditioner;
 		pmass_preconditioner.initialize(pressure_mass.block(0,0), 
-								TrilinosWrappers::PreconditionILU::AdditionalData());
-	
+					TrilinosWrappers::PreconditionILU::AdditionalData());
+
+
 		// initialize BlockShurPreconditioner passing the previously computed pmass precondtioner;
 		const BlockSchurPreconditioner<TrilinosWrappers::PreconditionILU> preconditioner(gamma, viscosity, system_matrix, pressure_mass, pmass_preconditioner);
-		
+		*/
+
+
+
+		PreconditionBlockTriangular preconditioner;
+  		preconditioner.initialize(system_matrix.block(0, 0),
+                            		pressure_mass.block(1, 1),
+                            		system_matrix.block(1, 0));
+
+
 		// solve using the Shur Preconditioner
 		gmres.solve(system_matrix, newton_update, system_rhs, preconditioner);
 		pcout << "FGMRES steps: " << solver_control.last_step() << std::endl;

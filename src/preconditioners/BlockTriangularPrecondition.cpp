@@ -1,4 +1,4 @@
-#include "PreconditionBlockTriangular.hpp"
+#include "BlockTriangularPrecondition.hpp"
 
 #include <deal.II/lac/solver_cg.h>
 #include <deal.II/lac/solver_control.h>
