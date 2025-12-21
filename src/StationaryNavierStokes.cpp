@@ -141,7 +141,6 @@ namespace NavierStokes{
 		// logic here is to take n_p elements from the n_u index and assign it to the second block
 		block_owned_dofs[1] = locally_owned_dofs.get_view(n_u, n_u + n_p);
 		block_relevant_dofs[1] = locally_relevant_dofs.get_view(n_u, n_u + n_p);
-
 	}
 
 	/** @brief Setup boundary conditions for each of the surfaces (inlet, walls, outlet)
@@ -214,8 +213,7 @@ namespace NavierStokes{
 	void StationaryNavierStokes<dim>::assemble(const bool initial_step, const bool assemble_matrix)
 	{
 		
-		if (assemble_matrix)
-		system_matrix = 0;
+		if (assemble_matrix) system_matrix = 0;
 		system_rhs = 0;
 		pressure_mass = 0;
 	
@@ -281,7 +279,7 @@ namespace NavierStokes{
 													 + phi_u[i] * (present_velocity_gradients[q] * phi_u[j]) 
 													+ phi_u[i] * (grad_phi_u[j] * present_velocity_values[q])
 													- div_phi_u[i] * phi_p[j] - phi_p[i] * div_phi_u[j] 
-													+ gamma * div_phi_u[i] * div_phi_u[j]); // here there was this term here: phi_p[i] * phi_p[j] used in pressure matrix
+													+ gamma * div_phi_u[i] * div_phi_u[j]) * fe_values.JxW(q); // here there was this term here: phi_p[i] * phi_p[j] used in pressure matrix
 							
 							// added this, exactly how bucelli implemented it. Dont know if it's mathematically correct tough
 							cell_pressure_mass_matrix(i, j) += phi_p[i] * phi_p[j] * fe_values.JxW(q);
