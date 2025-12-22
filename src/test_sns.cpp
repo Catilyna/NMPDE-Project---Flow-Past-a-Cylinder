@@ -5,7 +5,19 @@ int main(int argc, char* argv[])
 {
     using namespace NavierStokes;
     Utilities::MPI::MPI_InitFinalize mpi_init(argc, argv);
-    const std::string  mesh_file_name  = "../mesh/mesh3D_example.msh";
+
+    std::string mesh_file_name;
+    // argument parsing for passing different mesh by terminal
+    if(argc < 2){
+        mesh_file_name = "../mesh/mesh3d_example.msh";
+
+    } else{
+        mesh_file_name = std::string(argv[1]); 
+    } 
+
+    std::cout << argv[1] << std::endl;
+    std::cout << "mesh filename:" << mesh_file_name << std::endl;
+
     const unsigned int degree_velocity = 2;
     const unsigned int degree_pressure = 1;
 

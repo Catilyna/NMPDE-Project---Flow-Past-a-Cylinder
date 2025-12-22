@@ -52,14 +52,13 @@ namespace NavierStokes{
 		
 		pcout << "  Initializing the sparsity pattern" << std::endl;
 
-
 		Table<2, DoFTools::Coupling> coupling(dim + 1, dim + 1);
 		for (unsigned int c = 0; c < dim + 1; ++c)
 		{
 			for (unsigned int d = 0; d < dim + 1; ++d)
 			{
 				if (c == dim && d == dim) // pressure-pressure term do not appear in the equations
-					coupling[c][d] = DoFTools::none;
+					coupling[c][d] = DoFTools::always;
 				else // other combinations
 					coupling[c][d] = DoFTools::always;
 			}
@@ -265,6 +264,12 @@ namespace NavierStokes{
 			fe_values[velocities].get_function_gradients(evaluation_point, present_velocity_gradients);
 			fe_values[pressure].get_function_values(evaluation_point, present_pressure_values);
 	
+			for (const auto& tensor : present_velocity_gradients) {
+			if (std::isinf(tensor.norm())) {
+				pcout << "TROVATO GRADIENTE INFINITO NELLA CELLA: " << cell->active_cell_index() << std::endl;
+				// Puoi anche stampare i vertici della cella per vederla
+				}
+			}
 			for (unsigned int q = 0; q < n_q_points; ++q) {
 				for (unsigned int k = 0; k < dofs_per_cell; ++k) {
 					div_phi_u[k] = fe_values[velocities].divergence(k, q);
@@ -304,6 +309,7 @@ namespace NavierStokes{
 
 						for (size_t q = 0; q < n_q_face; ++q){
 							for (size_t i = 0; i < dofs_per_cell; ++i){
+									// 
 									local_rhs(i) += -p_out * 
 										scalar_product(fe_face_values.normal_vector(q),
 										fe_face_values[velocities].value(i, q)) * fe_face_values.JxW(q);
@@ -371,7 +377,8 @@ namespace NavierStokes{
 		SolverControl solver_control(system_matrix.m(), 1e-4 * system_rhs.l2_norm(), true);
 		SolverFGMRES<TrilinosWrappers::MPI::BlockVector> gmres(solver_control);
 		
-		/*// initialize ILU preconditioner with the pressure mass matrix we derived in the assemble() function
+		/*
+		// initialize ILU preconditioner with the pressure mass matrix we derived in the assemble() function
 		TrilinosWrappers::PreconditionILU pmass_preconditioner;
 		pmass_preconditioner.initialize(pressure_mass.block(0,0), 
 					TrilinosWrappers::PreconditionILU::AdditionalData());
@@ -380,14 +387,12 @@ namespace NavierStokes{
 		// initialize BlockShurPreconditioner passing the previously computed pmass precondtioner;
 		const BlockSchurPreconditioner<TrilinosWrappers::PreconditionILU> preconditioner(gamma, viscosity, system_matrix, pressure_mass, pmass_preconditioner);
 		*/
-
-
-
+		
 		PreconditionBlockTriangular preconditioner;
   		preconditioner.initialize(system_matrix.block(0, 0),
                             		pressure_mass.block(1, 1),
                             		system_matrix.block(1, 0));
-
+		
 
 		// solve using the Shur Preconditioner
 		gmres.solve(system_matrix, newton_update, system_rhs, preconditioner);
@@ -549,8 +554,8 @@ namespace NavierStokes{
 		data_out.build_patches();
 	
 		// here to insert correct ReyNolds Number aswell REMEMBER THIS 
-		const std::string output_file_name = std::to_string(1.0 / viscosity) + "-solution";
-		data_out.write_vtu_with_pvtu_record("../results",
+		const std::string output_file_name = std::to_string(static_cast<int>(std::round(1.0 / viscosity))) + "Re-SNS_Solution";
+		data_out.write_vtu_with_pvtu_record("../results/",
 											output_file_name,
 											0,
 											MPI_COMM_WORLD);

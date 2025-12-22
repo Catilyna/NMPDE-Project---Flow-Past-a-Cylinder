@@ -123,7 +123,7 @@ class Mesh3D:
         self.set_physical_groups()
         
         # lcMin/Max might need to be larger for 3D to keep cell count reasonable and not stress RAM
-        self.set_fields(distMin=0.15, distMax=0.5, lcMin=0.08, lcMax=0.3)
+        self.set_fields(distMin=0.025, distMax=0.10, lcMin=0.01, lcMax=0.03)
         
         gmsh.model.mesh.generate(3)
         
@@ -157,10 +157,13 @@ def main():
     parser.add_argument('-r', '--radius', type=float, default=0.05, 
                         help='Cylinder radius')
     
+    parser.add_argument('-n', '--name', type=str, default="mesh3D", 
+                        help='Cylinder radius')
+    
     args = parser.parse_args()
     
     mesh = Mesh3D(args.length, args.height, args.width)
-    mesh.build(args.cx, args.cy, args.radius, "mesh3D_example")
+    mesh.build(args.cx, args.cy, args.radius, args.name)
 
 if __name__ == "__main__":
     main()
