@@ -123,7 +123,15 @@ class Mesh3D:
         self.set_physical_groups()
         
         # lcMin/Max might need to be larger for 3D to keep cell count reasonable and not stress RAM
-        self.set_fields(distMin=0.025, distMax=0.10, lcMin=0.01, lcMax=0.03)
+        self.set_fields(distMin=0.075, distMax=0.2, lcMin=0.033, lcMax=0.1)
+        """
+        CHANGE THIS PREVIOUS VALUES TO DEFINE THE REFINEMENT OF THE MESH:
+        GENERIC PARAMETERS WE ARE USING FOR NOW (AT LEAST HOW I DID FOR FIRST TESTS):
+        DISTMIN: 0.05
+        DISTMAX: 0.15
+        LCMIN: 0.02
+        LCMAX: 0.06
+        """
         
         gmsh.model.mesh.generate(3)
         

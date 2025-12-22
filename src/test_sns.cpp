@@ -13,10 +13,7 @@ int main(int argc, char* argv[])
 
     } else{
         mesh_file_name = std::string(argv[1]); 
-    } 
-
-    std::cout << argv[1] << std::endl;
-    std::cout << "mesh filename:" << mesh_file_name << std::endl;
+    }
 
     const unsigned int degree_velocity = 2;
     const unsigned int degree_pressure = 1;
