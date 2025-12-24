@@ -1,0 +1,199 @@
+#pragma once
+#include <deal.II/base/quadrature_lib.h>
+#include <deal.II/base/function.h>
+#include <deal.II/base/utilities.h>
+#include <deal.II/base/tensor.h>
+#include <deal.II/base/conditional_ostream.h>
+
+#include <deal.II/lac/block_vector.h>
+#include <deal.II/lac/full_matrix.h>
+#include <deal.II/lac/block_sparse_matrix.h>
+#include <deal.II/lac/dynamic_sparsity_pattern.h>
+#include <deal.II/lac/solver_cg.h>
+#include <deal.II/lac/solver_gmres.h>
+#include <deal.II/lac/precondition.h>
+#include <deal.II/lac/affine_constraints.h>
+#include <deal.II/lac/trilinos_block_sparse_matrix.h>
+#include <deal.II/lac/trilinos_parallel_block_vector.h>
+#include <deal.II/lac/trilinos_precondition.h>
+#include <deal.II/lac/trilinos_sparse_matrix.h>
+
+#include <deal.II/grid/tria.h>
+#include <deal.II/grid/grid_generator.h>
+#include <deal.II/grid/grid_refinement.h>
+#include <deal.II/grid/grid_tools.h>
+#include <deal.II/grid/grid_in.h>
+
+#include <deal.II/dofs/dof_handler.h>
+#include <deal.II/dofs/dof_renumbering.h>
+#include <deal.II/dofs/dof_tools.h>
+#include <deal.II/fe/fe_simplex_p.h>
+#include <deal.II/fe/fe_system.h>
+#include <deal.II/fe/fe_values.h>
+#include <deal.II/fe/fe_values_extractors.h>
+#include <deal.II/fe/mapping_fe.h>
+
+#include <deal.II/fe/fe_q.h>
+#include <deal.II/fe/fe_system.h>
+#include <deal.II/fe/fe_values.h>
+
+#include <deal.II/numerics/vector_tools.h>
+#include <deal.II/numerics/data_out.h>
+#include <deal.II/numerics/error_estimator.h>
+#include <deal.II/numerics/matrix_tools.h>
+#include <deal.II/numerics/solution_transfer.h>
+
+#include <deal.II/lac/sparse_direct.h>
+#include <deal.II/lac/sparse_ilu.h>
+
+#include <deal.II/distributed/fully_distributed_tria.h>
+#include <deal.II/distributed/solution_transfer.h>
+#include <fstream>
+#include <iostream>
+#include <vector>
+
+using namespace dealii;
+
+namespace NavierStokes{
+
+    template<int dim>
+    class NonStationaryNavierStokes {
+        public:
+
+        /** @brief class that defines the Inlet Velocity object. So the value
+         * of the velocity of the fluid at the inlet (boundary). 
+         * It must be initialized with (dim + 1) component considering
+         * pressure values aswell which will be set to 0.0 .
+         */
+        class InletVelocity : public Function<dim>
+        {
+        public:
+            InletVelocity()
+            : Function<dim>(dim + 1)
+            {}
+
+            virtual void
+            vector_value(const Point<dim> &p, Vector<double> &values) const override
+            {
+            values[0] = 1.0;
+
+            for (unsigned int i = 1; i < dim + 1; ++i)
+                values[i] = 0.0 + p[0] * 0.0;
+            }
+
+            virtual double
+            value(const Point<dim> &p, const unsigned int component = 0) const override
+            {
+            if (component == 0)
+                return 1.0 + p[0] * 0.0; // added jsut because I didnt want warning by compiler
+            else 
+                return 0.0;
+            }
+
+        protected:
+            const double alpha = 1.0;
+        };
+
+        NonStationaryNavierStokes(const std::string &mesh_file_name_,
+                            const unsigned int &degree_velocity_,
+                            const unsigned int &degree_pressure_)
+            : mpi_size(Utilities::MPI::n_mpi_processes(MPI_COMM_WORLD))
+            , mpi_rank(Utilities::MPI::this_mpi_process(MPI_COMM_WORLD))
+            , pcout(std::cout, mpi_rank == 0)
+            , mesh_file_name(mesh_file_name_)
+            , degree_velocity(degree_velocity_)
+            , degree_pressure(degree_pressure_)
+            , mesh(MPI_COMM_WORLD)
+        {};
+
+        void run();
+    private:
+        void setup_dofs();
+
+        void setup_boundaries();
+
+        void initialize_system();
+
+        void assemble(const bool initial_step, const bool assemble_matrix);
+
+        void assemble_system(const bool initial_step);
+
+        void assemble_rhs(const bool initial_step);
+
+        void solve(const bool initial_step);
+
+        void process_solution();
+
+        void output_results() const;
+
+        void newton_iteration(const double tolerance,
+                            const unsigned int max_n_line_searches,
+                            const bool is_initial_step,
+                            const bool output_result);
+
+        void compute_initial_guess(double step_size);
+
+        // problem related values setup
+        double viscosity = 1.;
+        double p_out = 1.;
+        double gamma;
+        const unsigned int degree_velocity;
+        const unsigned int degree_pressure;
+
+        // parallelization setup
+        const unsigned int mpi_size;
+        const unsigned int mpi_rank;
+        ConditionalOStream pcout;
+
+        const std::string mesh_file_name;
+
+        InletVelocity inlet_velocity;
+
+        std::vector<types::global_dof_index> dofs_per_block;
+
+        // Luca: I am quite confused about the template parameters here
+        // G++ says that both are required, but Bucelli in his code only
+        // specifies one (and it works). Need to clarify this point.
+        parallel::fullydistributed::Triangulation<dim, dim> mesh; 
+
+        std::unique_ptr<FiniteElement<dim>> fe;
+
+        std::unique_ptr<Quadrature<dim>> quadrature;
+        std::unique_ptr<Quadrature<dim - 1>> quadrature_face;
+
+        DoFHandler<dim> dof_handler;
+        IndexSet locally_owned_dofs;
+        IndexSet locally_relevant_dofs;
+
+        std::vector<IndexSet> block_owned_dofs;
+        std::vector<IndexSet> block_relevant_dofs;
+
+        AffineConstraints<double> zero_constraints;
+
+        AffineConstraints<double> nonzero_constraints;
+
+        TrilinosWrappers::BlockSparsityPattern sparsity_pattern;
+
+        TrilinosWrappers::BlockSparseMatrix system_matrix;
+        TrilinosWrappers::BlockSparseMatrix pressure_mass;
+
+        // following Bucelli's convention
+        TrilinosWrappers::MPI::BlockVector solution_owned;
+        TrilinosWrappers::MPI::BlockVector solution;
+        TrilinosWrappers::MPI::BlockVector system_rhs;
+
+        // Usefull vectors used in newton update
+        TrilinosWrappers::MPI::BlockVector present_solution;
+        TrilinosWrappers::MPI::BlockVector newton_update;
+        TrilinosWrappers::MPI::BlockVector evaluation_point;
+
+        // time stepping values
+        double time = 0.0;
+        double time_step = 0.01;
+        unsigned int timestep_number = 0;
+        unsigned int n_time_steps = 100;
+
+        TrilinosWrappers::MPI::BlockVector old_solution;
+        TrilinosWrappers::MPI::BlockVector current_solution;
+    };
+}; // namespace NavierStokes
