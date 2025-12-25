@@ -7,7 +7,7 @@ class Mesh3D:
     Class used to initialize a 3D mesh for a Navier-Stokes equation problem.
     Uses the OpenCASCADE (OCC) kernel for Constructive Solid Geometry (CSG).
     """
-    def __init__(self, L, H, W):
+    def __init__(self, L, H, W, cylinder = True):
         self.L = L
         self.H = H
         self.W = W # Width of the channel
@@ -20,8 +20,12 @@ class Mesh3D:
         self.volume_tag = None
         self.obstacle_surface_tags = []
         self.outer_surface_tags = []
+        
+        # determines if to create a cylindrical obstacle or not
+        self.cylinder = cylinder        
+        
 
-    def create_geometry(self, cx, cy, r):
+    def create_geometry(self, cx, cz, r):
         """
         Creates a Box and subtracts a Cylinder from it using Boolean operations.
         """
@@ -31,11 +35,14 @@ class Mesh3D:
 
         # Create the Cylinder
         # Arguments: x, y, z, dx, dy, dz, r
-        # Cylinder runs along the Z-axis
-        cylinder_id = gmsh.model.occ.addCylinder(cx, cy, 0, 0, 0, self.W, r)
+        # Cylinder runs along the Y-axis
+        if(self.cylinder):
+            obstacle_id = gmsh.model.occ.addCylinder(cx, 0, cz, 0, self.W, 0, r)
+        else:
+            obstacle_id = gmsh.model.occ.addBox(0.45, 0, 0.15, 0.1, self.W, 0.1)            
 
         # We subtract the cylinder from the channel
-        cut_result = gmsh.model.occ.cut([(3, channel_id)], [(3, cylinder_id)])
+        cut_result = gmsh.model.occ.cut([(3, channel_id)], [(3, obstacle_id)])
         
         # The result of the cut is our fluid domain volume
         self.volume_tag = cut_result[0][0][1] # cur_result are stored like tuples inside a list with ((outputDimTags), (outputDimTagsMap)) so it requires 3 indices to access elements
@@ -123,7 +130,7 @@ class Mesh3D:
         self.set_physical_groups()
         
         # lcMin/Max might need to be larger for 3D to keep cell count reasonable and not stress RAM
-        self.set_fields(distMin=0.075, distMax=0.2, lcMin=0.033, lcMax=0.1)
+        self.set_fields(distMin=0.05, distMax=0.15, lcMin=0.02, lcMax=0.06)
         """
         CHANGE THIS PREVIOUS VALUES TO DEFINE THE REFINEMENT OF THE MESH:
         GENERIC PARAMETERS WE ARE USING FOR NOW (AT LEAST HOW I DID FOR FIRST TESTS):
@@ -135,7 +142,7 @@ class Mesh3D:
         
         gmsh.model.mesh.generate(3)
         
-        output_dir = "../mesh"
+        output_dir = "../mesh/3D"
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
             
@@ -160,18 +167,23 @@ def main():
     # Cylinder Position
     parser.add_argument('-cx', '--cx', type=float, default=0.5, 
                         help='Cylinder center X')
-    parser.add_argument('-cy', '--cy', type=float, default=0.2, 
-                        help='Cylinder center Y')
+    parser.add_argument('-cz', '--cz', type=float, default=0.2, 
+                        help='Cylinder center Z')
     parser.add_argument('-r', '--radius', type=float, default=0.05, 
                         help='Cylinder radius')
     
     parser.add_argument('-n', '--name', type=str, default="mesh3D", 
-                        help='Cylinder radius')
+                        help='filename')
     
     args = parser.parse_args()
+    cyls_name = f"{args.name}_cylinder"
+    prl_name = f"{args.name}_parallelepiped"
     
     mesh = Mesh3D(args.length, args.height, args.width)
-    mesh.build(args.cx, args.cy, args.radius, args.name)
+    mesh.build(args.cx, args.cz, args.radius, cyls_name)
+    
+    mesh_square = Mesh3D(args.length, args.height, args.width, False)
+    mesh_square.build(args.cx, args.cz, args.radius, prl_name)
 
 if __name__ == "__main__":
     main()

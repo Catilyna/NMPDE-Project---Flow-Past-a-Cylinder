@@ -92,10 +92,10 @@ class Mesh2D:
         
         gmsh.model.geo.synchronize()
         
-        self.setFields(0.15, 0.5, 0.02, 0.1, 100)       
+        self.setFields(0.0075, 0.25, 0.01, 0.05, 100)       
         
         gmsh.model.mesh.generate(2) # Generate 2D mesh
-        gmsh.write(f"./mesh/{output_filename}.msh")
+        gmsh.write(f"../mesh/2D/{output_filename}.msh")
 
         # Launch GUI to see the result (optional)
         gmsh.fltk.run()
@@ -118,12 +118,14 @@ def main():
                         help='Set the cy of the center ot the cilinder')
     parser.add_argument('-r', '--radius', type=float, default=0.1, 
                         help='Set the radius of the cilinder')
+    parser.add_argument('-n', '--name', type=str, default="mesh2D", 
+                        help='filename')
 
     # Parse the arguments
     args = parser.parse_args()
     
     mesh = Mesh2D(args.length, args.height)
-    mesh.build(args.cx, args.cy, args.radius, "mesh2D_example")
+    mesh.build(args.cx, args.cy, args.radius, args.name)
 
 
 if __name__ == "__main__":
