@@ -9,7 +9,7 @@ int main(int argc, char* argv[])
     std::string mesh_file_name;
     // argument parsing for passing different mesh by terminal
     if(argc < 2){
-        mesh_file_name = "../mesh/mesh3d_example.msh";
+        mesh_file_name = "../mesh/mesh3D_example.msh";
 
     } else{
         mesh_file_name = std::string(argv[1]); 
