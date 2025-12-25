@@ -344,6 +344,7 @@ namespace NavierStokes{
 	
 	template <int dim>
 	void StationaryNavierStokes<dim>::assemble_rhs(const bool initial_step)
+	{}
 
 	template <int dim>
 	void StationaryNavierStokes<dim>::solve(const bool initial_step)
