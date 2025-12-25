@@ -1,0 +1,36 @@
+# ==========================================
+# 3D-2 test case (unsteady) 
+# ==========================================
+
+case:
+  name: "3D-2 steady testcase"
+  dimensionality: 2
+
+# ------------------------------------------
+# Physical Parameters
+# ------------------------------------------
+physics:
+  fluid:
+    kinematic_viscosity: 0.001  # nu (m^2/s)
+    density: 1.0                # rho (kg/m^3)
+  
+  domain:
+    x_range: [0.0, 2.5]        # Length L
+    y_range: [0.0, 0.41]       # Height H
+    z_range: [0.0, 0.41]       # Width W
+    obstacle_dimensions: [0.45, 0.55, 0.15, 0.25, 0, 0.41] # dimensions in the format [cx_min, cx_max, cy_min, cy_max, cz_min, cz_max]     
+    cylinder_diameter: 0.1     
+
+  initial_conditions:
+    Ux: 16 * u_mean * y * z * (y_range[1] - y) * (z_range[1] - z) / y_range**4
+    Uy: 0
+    Uz: 0
+    pressure: 0.0
+
+  boundary_conditions:
+    inlet:
+      type: "parabolic_velocity" # Custom type handled by your solver
+      u_mean: 2.25               # Mean velocity
+    outlet:
+      type: "pressure_outlet"
+      value: 0.0                 # Not specified

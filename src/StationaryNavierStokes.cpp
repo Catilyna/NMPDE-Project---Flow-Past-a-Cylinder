@@ -309,7 +309,6 @@ namespace NavierStokes{
 
 						for (size_t q = 0; q < n_q_face; ++q){
 							for (size_t i = 0; i < dofs_per_cell; ++i){
-									// 
 									local_rhs(i) += -p_out * 
 										scalar_product(fe_face_values.normal_vector(q),
 										fe_face_values[velocities].value(i, q)) * fe_face_values.JxW(q);
@@ -324,24 +323,6 @@ namespace NavierStokes{
 			// this object here holds a list on constraint based on the fact wheter
 			// this is the initial step or not.
 			const AffineConstraints<double> &constraints_used = initial_step ? nonzero_constraints : zero_constraints;
-			
-			/* Debug prints for segmentation fault investigation
-			pcout << "[DEBUG] local_matrix size: " << local_matrix.m() << "x" << local_matrix.n() << std::endl;
-			pcout << "[DEBUG] local_rhs size: " << local_rhs.size() << std::endl;
-			pcout << "[DEBUG] local_dof_indices size: " << local_dof_indices.size() << std::endl;
-			pcout << "[DEBUG] First 10 local_dof_indices: ";
-			for (size_t dbg_i = 0; dbg_i < std::min<size_t>(10, local_dof_indices.size()); ++dbg_i) {
-				pcout << local_dof_indices[dbg_i] << " ";
-			}
-			pcout << std::endl;
-			// Print min/max of local_dof_indices
-			auto minmax = std::minmax_element(local_dof_indices.begin(), local_dof_indices.end());
-			pcout << "[DEBUG] local_dof_indices min: " << *minmax.first << ", max: " << *minmax.second << std::endl;
-			// Print global system matrix/vector sizes
-			pcout << "[DEBUG] system_matrix.m(): " << system_matrix.m() << ", n(): " << system_matrix.n() << std::endl;
-			pcout << "[DEBUG] system_rhs.size(): " << system_rhs.size() << std::endl;
-			*/
-			
 			if (assemble_matrix) {
 				constraints_used.distribute_local_to_global(local_matrix, local_rhs, local_dof_indices, system_matrix, system_rhs);
 			} else {
@@ -363,10 +344,7 @@ namespace NavierStokes{
 	
 	template <int dim>
 	void StationaryNavierStokes<dim>::assemble_rhs(const bool initial_step)
-	{
-		assemble(initial_step, false);
-	}
-	
+
 	template <int dim>
 	void StationaryNavierStokes<dim>::solve(const bool initial_step)
 	{
@@ -383,7 +361,6 @@ namespace NavierStokes{
 		pmass_preconditioner.initialize(pressure_mass.block(0,0), 
 					TrilinosWrappers::PreconditionILU::AdditionalData());
 
-
 		// initialize BlockShurPreconditioner passing the previously computed pmass precondtioner;
 		const BlockSchurPreconditioner<TrilinosWrappers::PreconditionILU> preconditioner(gamma, viscosity, system_matrix, pressure_mass, pmass_preconditioner);
 		*/
@@ -392,7 +369,6 @@ namespace NavierStokes{
   		preconditioner.initialize(system_matrix.block(0, 0),
                             		pressure_mass.block(1, 1),
                             		system_matrix.block(1, 0));
-		
 
 		// solve using the Shur Preconditioner
 		gmres.solve(system_matrix, newton_update, system_rhs, preconditioner);
@@ -401,50 +377,6 @@ namespace NavierStokes{
 
 		solution = newton_update; // update owned and ghost dofs
 	}
-	
-	/** @brief Function identifies area where the error is larger and refines the mesh
-	 *  in order to create new cells there
-	 
-	template <int dim>
-	void StationaryNavierStokes<dim>::refine_mesh()
-	{
-		// error estimation
-		Vector<float> estimated_error_per_cell(mesh.n_active_cells());
-		const FEValuesExtractors::Vector velocity(0);
-		KellyErrorEstimator<dim>::estimate(dof_handler, 
-										QGauss<dim - 1>(degree_velocity + degree_pressure + 1), 
-										std::map<types::boundary_id, 
-										const Function<dim> *>(), 
-										present_solution, 
-										estimated_error_per_cell, 
-										fe->component_mask(velocity));
-	
-		// here it takes the 0.3 (30%) of the cells with the highest error from the mesh for refinement
-		GridRefinement::refine_and_coarsen_fixed_number(mesh, estimated_error_per_cell, 0.3, 0.0);
-		mesh.prepare_coarsening_and_refinement();
-	
-		// creating new points means it is necessary to add more dof.
-		// This also means we need to store somewhere the solutiuon computed so far
-		parallel::distributed::SolutionTransfer<dim, TrilinosWrappers::MPI::BlockVector> solution_transfer(dof_handler);
-		solution_transfer.prepare_for_coarsening_and_refinement(present_solution);
-		mesh.execute_coarsening_and_refinement();
-	
-		// redefines dof
-		setup_dofs();
-		// resize matrices and present solution
-		initialize_system();
-	
-		// interpolating on the new mesh
-		TrilinosWrappers::MPI::BlockVector tmp_solution;
-		tmp_solution.reinit(present_solution,
-							MPI_COMM_WORLD);
-
-		solution_transfer.interpolate(tmp_solution);
-		nonzero_constraints.distribute(tmp_solution);
-		
-		present_solution = tmp_solution;
-	}
-	*/
 
 	/** @brief We use the Newton method in order to solve a nonlinear system like
 	 * 	this one 
@@ -599,13 +531,6 @@ namespace NavierStokes{
 	template <int dim>
 	void StationaryNavierStokes<dim>::run()
 	{
-		// GridGenerator::hyper_cube(mesh); This generated an hypercube but this is not our case
-
-		//	This function here redefines each cell for each time you specify the 'times'
-		//  argument. Actually we dont need it as our mesh is interpreted in parallel and 
-		//  it has already been computed by gmsh.
-		//  mesh.refine_global(1); 
-
 		const double Re = 1.0 / viscosity;
 		if (Re > 1000.0) {
 			pcout << "Searching for initial guess ..." << std::endl;
