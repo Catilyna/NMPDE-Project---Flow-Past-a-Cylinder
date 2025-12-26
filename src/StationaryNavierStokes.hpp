@@ -136,7 +136,7 @@ namespace NavierStokes{
         // problem related values setup
         double viscosity = 1.;
         double p_out = 1.;
-        double gamma;
+        double gamma = 1.; 
         const unsigned int degree_velocity;
         const unsigned int degree_pressure;
 

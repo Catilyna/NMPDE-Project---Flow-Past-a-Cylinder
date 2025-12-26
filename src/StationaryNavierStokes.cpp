@@ -358,20 +358,21 @@ namespace NavierStokes{
 		SolverControl solver_control(system_matrix.m(), 1e-4 * system_rhs.l2_norm(), true);
 		SolverFGMRES<TrilinosWrappers::MPI::BlockVector> gmres(solver_control);
 		
-		/*
 		// initialize ILU preconditioner with the pressure mass matrix we derived in the assemble() function
 		TrilinosWrappers::PreconditionILU pmass_preconditioner;
-		pmass_preconditioner.initialize(pressure_mass.block(0,0), 
-					TrilinosWrappers::PreconditionILU::AdditionalData());
-
+		pmass_preconditioner.initialize(pressure_mass.block(1,1), 
+		TrilinosWrappers::PreconditionILU::AdditionalData());
+		
+		// Mike: with Schur Preconditioner works now but seems like that has a bad performance in term of iterations
 		// initialize BlockShurPreconditioner passing the previously computed pmass precondtioner;
 		const BlockSchurPreconditioner<TrilinosWrappers::PreconditionILU> preconditioner(gamma, viscosity, system_matrix, pressure_mass, pmass_preconditioner);
-		*/
 		
+		/*
 		PreconditionBlockTriangular preconditioner;
   		preconditioner.initialize(system_matrix.block(0, 0),
                             		pressure_mass.block(1, 1),
                             		system_matrix.block(1, 0));
+		*/							
 
 		// solve using the Shur Preconditioner
 		gmres.solve(system_matrix, newton_update, system_rhs, preconditioner);

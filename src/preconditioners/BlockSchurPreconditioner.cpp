@@ -24,7 +24,7 @@ namespace NavierStokes {
             SolverControl solver_control(1000, 1e-6 * src.block(1).l2_norm());
             SolverCG<TrilinosWrappers::MPI::Vector> cg(solver_control);
             dst.block(1) = 0.0;
-            cg.solve(pressure_mass, dst.block(1), src.block(1), mp_preconditioner);
+            cg.solve(pressure_mass.block(1, 1), dst.block(1), src.block(1), mp_preconditioner);
             dst.block(1) *= -(viscosity + gamma);
         }
         {
