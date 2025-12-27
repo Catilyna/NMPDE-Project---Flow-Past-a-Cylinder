@@ -652,15 +652,26 @@ namespace NavierStokes{
 		}
 	}
 
+	/** @brief Set the initial condition for present_solution and old_solution. */
+	template <int dim>
+	void NonStationaryNavierStokes<dim>::set_initial_condition()
+	{
+		// Interpolate custom initial condition: inlet profile at inlet, zero elsewhere
+		VectorTools::interpolate(dof_handler, initial_condition, present_solution);
+		old_solution = present_solution;
+		nonzero_constraints.distribute(present_solution);
+		nonzero_constraints.distribute(old_solution);
+	}
+
+	/** @brief Function that runs the time simulation loop */
 	template <int dim>
 	void NonStationaryNavierStokes<dim>::run_time_simulation(){
 		// Setting up initial conditions
 		{
 			initialize_system();
-
+			set_initial_condition();
 			time = 0.0;
 			timestep_number = 0;
-
 			output_results();
 		}
 

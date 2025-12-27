@@ -94,6 +94,33 @@ namespace NavierStokes{
             const double alpha = 1.0;
         };
 
+        /** @brief Initial condition: inlet profile at inlet, zero elsewhere. */
+        class InitialCondition : public Function<dim>
+        {
+        public:
+            InitialCondition() : Function<dim>(dim + 1) {}
+
+            virtual void vector_value(const Point<dim> &p, Vector<double> &values) const override
+            {
+                // Set velocity to inlet profile if x is at inlet (e.g., x=0), else zero
+                if (std::abs(p[0]) < 1e-12) {
+                    values[0] = 1.0; // Example: constant inlet profile, adjust as needed
+                } else {
+                    values[0] = 0.0;
+                }
+                for (unsigned int i = 1; i < dim + 1; ++i)
+                    values[i] = 0.0;
+            }
+
+            virtual double value(const Point<dim> &p, const unsigned int component = 0) const override
+            {
+                if (component == 0 && std::abs(p[0]) < 1e-12)
+                    return 1.0;
+                else
+                    return 0.0;
+            }
+        };
+
         NonStationaryNavierStokes(const std::string &mesh_file_name_,
                             const unsigned int &degree_velocity_,
                             const unsigned int &degree_pressure_,
@@ -141,6 +168,8 @@ namespace NavierStokes{
 
         void compute_initial_guess(double step_size);
 
+        void set_initial_condition();
+
         void run();
 
         // problem related values setup
@@ -158,6 +187,8 @@ namespace NavierStokes{
         const std::string mesh_file_name;
 
         InletVelocity inlet_velocity;
+
+        InitialCondition initial_condition;
 
         std::vector<types::global_dof_index> dofs_per_block;
 
