@@ -96,17 +96,25 @@ namespace NavierStokes{
 
         NonStationaryNavierStokes(const std::string &mesh_file_name_,
                             const unsigned int &degree_velocity_,
-                            const unsigned int &degree_pressure_)
+                            const unsigned int &degree_pressure_,
+                            const double &T_,
+                            const double &delta_t_,
+                            const double &theta_
+                        )
             : mpi_size(Utilities::MPI::n_mpi_processes(MPI_COMM_WORLD))
             , mpi_rank(Utilities::MPI::this_mpi_process(MPI_COMM_WORLD))
             , pcout(std::cout, mpi_rank == 0)
             , mesh_file_name(mesh_file_name_)
             , degree_velocity(degree_velocity_)
             , degree_pressure(degree_pressure_)
+            , T(T_)
+            , delta_t(delta_t_)
+            , theta(theta_)
             , mesh(MPI_COMM_WORLD)
         {};
 
-        void run();
+        void run_time_simulation();
+
     private:
         void setup_dofs();
 
@@ -132,6 +140,8 @@ namespace NavierStokes{
                             const bool output_result);
 
         void compute_initial_guess(double step_size);
+
+        void run();
 
         // problem related values setup
         double viscosity = 1.;
@@ -182,17 +192,20 @@ namespace NavierStokes{
         TrilinosWrappers::MPI::BlockVector solution;
         TrilinosWrappers::MPI::BlockVector system_rhs;
 
-        // Usefull vectors used in newton update
+        // Useful vectors used in Newton update
         TrilinosWrappers::MPI::BlockVector present_solution;
         TrilinosWrappers::MPI::BlockVector newton_update;
         TrilinosWrappers::MPI::BlockVector evaluation_point;
 
         // time stepping values
-        double time = 0.0;
-        double time_step = 0.01;
-        unsigned int timestep_number = 0;
-        unsigned int n_time_steps = 100;
+        const double T;                 // final time
+        const double delta_t;           // time step size
+        double time = 0.0;                    // current time
+        unsigned int timestep_number;   // current time step number
 
+        const double theta;            // parameter for the theta-method
+
+        // old and current solution storage (for time stepping)
         TrilinosWrappers::MPI::BlockVector old_solution;
         TrilinosWrappers::MPI::BlockVector current_solution;
     };

@@ -237,10 +237,21 @@ namespace NavierStokes{
 	
 		std::vector<types::global_dof_index> local_dof_indices(dofs_per_cell);
 	
-		// vecotrs used to store past values at each quadrature point
+		// vectors used to store present values at each quadrature point
 		std::vector<Tensor<1, dim>> present_velocity_values(n_q_points);
 		std::vector<Tensor<2, dim>> present_velocity_gradients(n_q_points);
 		std::vector<double> present_pressure_values(n_q_points);
+
+		// vectors used to store past values at each quadrature point
+		std::vector<Tensor<1, dim>> old_velocity_values(n_q_points);
+		std::vector<Tensor<2, dim>> old_velocity_gradients(n_q_points);
+		std::vector<double> old_pressure_values(n_q_points);
+
+		// extract old solution values at quadrature points
+		/*fe_values[velocities].get_function_values(old_solution, old_velocity_values);
+		fe_values[velocities].get_function_gradients(old_solution, old_velocity_gradients);
+		fe_values[pressure].get_function_values(old_solution, old_pressure_values);*/
+
 	
 		// vectors used to store values of the test functions
 		std::vector<double> div_phi_u(dofs_per_cell);  			// divergence of velocity
@@ -263,40 +274,52 @@ namespace NavierStokes{
 			fe_values[velocities].get_function_values(evaluation_point, present_velocity_values);
 			fe_values[velocities].get_function_gradients(evaluation_point, present_velocity_gradients);
 			fe_values[pressure].get_function_values(evaluation_point, present_pressure_values);
+
+			// Same at old solution
+			fe_values[velocities].get_function_values(old_solution, old_velocity_values);
+    		fe_values[velocities].get_function_gradients(old_solution, old_velocity_gradients);
+    		fe_values[pressure].get_function_values(old_solution, old_pressure_values);
 	
 			for (const auto& tensor : present_velocity_gradients) {
 			if (std::isinf(tensor.norm())) {
 				pcout << "TROVATO GRADIENTE INFINITO NELLA CELLA: " << cell->active_cell_index() << std::endl;
-				// Puoi anche stampare i vertici della cella per vederla
 				}
 			}
 			for (unsigned int q = 0; q < n_q_points; ++q) {
-				for (unsigned int k = 0; k < dofs_per_cell; ++k) {
-					div_phi_u[k] = fe_values[velocities].divergence(k, q);
-					grad_phi_u[k] = fe_values[velocities].gradient(k, q);
-					phi_u[k] = fe_values[velocities].value(k, q);
-					phi_p[k] = fe_values[pressure].value(k, q);
-				}
-				for (unsigned int i = 0; i < dofs_per_cell; ++i) {
-					if (assemble_matrix) {
-						for (unsigned int j = 0; j < dofs_per_cell; ++j) {
-							local_matrix(i, j) += (viscosity * scalar_product(grad_phi_u[i], grad_phi_u[j])
+				   for (unsigned int k = 0; k < dofs_per_cell; ++k) {
+					   div_phi_u[k] = fe_values[velocities].divergence(k, q);
+					   grad_phi_u[k] = fe_values[velocities].gradient(k, q);
+					   phi_u[k] = fe_values[velocities].value(k, q);
+					   phi_p[k] = fe_values[pressure].value(k, q);
+				   }
+				   for (unsigned int i = 0; i < dofs_per_cell; ++i) {
+					   if (assemble_matrix) {
+						   for (unsigned int j = 0; j < dofs_per_cell; ++j) {
+							   // time derivative term (theta-weighted)
+							   local_matrix(i, j) += theta * (1.0 / delta_t) * phi_u[i] * phi_u[j] * fe_values.JxW(q);
+
+							// present term (* theta)
+							local_matrix(i, j) += theta * (viscosity * scalar_product(grad_phi_u[i], grad_phi_u[j])
 													 + phi_u[i] * (present_velocity_gradients[q] * phi_u[j]) 
 													+ phi_u[i] * (grad_phi_u[j] * present_velocity_values[q])
 													- div_phi_u[i] * phi_p[j] - phi_p[i] * div_phi_u[j] 
 													+ gamma * div_phi_u[i] * div_phi_u[j]) * fe_values.JxW(q); // here there was this term here: phi_p[i] * phi_p[j] used in pressure matrix
 							
-							// added this, exactly how bucelli implemented it. Dont know if it's mathematically correct tough
+							// added this, exactly how Bucelli implemented it. Dont know if it's mathematically correct tough
 							cell_pressure_mass_matrix(i, j) += phi_p[i] * phi_p[j] * fe_values.JxW(q);
 						}
 					}
 					double present_velocity_divergence = trace(present_velocity_gradients[q]);
-					local_rhs(i) += (-viscosity * scalar_product(grad_phi_u[i], present_velocity_gradients[q]) 
-									- phi_u[i] * (present_velocity_gradients[q] * present_velocity_values[q]) 
-									+ div_phi_u[i] * present_pressure_values[q]
-									+ phi_p[i] * present_velocity_divergence
-									- gamma * div_phi_u[i] * present_velocity_divergence) 
-									* fe_values.JxW(q);
+					double old_velocity_divergence = trace(old_velocity_gradients[q]);
+					// time derivative term (is (1-theta) here necessary?)
+					local_rhs(i) += (1.0 / delta_t) * phi_u[i] * old_velocity_values[q] * fe_values.JxW(q);
+					// old term (* (1 - theta))
+					local_rhs(i) -= (1.0 - theta) * (
+						viscosity * scalar_product(grad_phi_u[i], old_velocity_gradients[q])
+						+ phi_u[i] * (old_velocity_gradients[q] * old_velocity_values[q])
+						- div_phi_u[i] * old_pressure_values[q] - phi_p[i] * trace(old_velocity_gradients[q])
+						+ gamma * div_phi_u[i] * trace(old_velocity_gradients[q])
+					) * fe_values.JxW(q);
 				}
 			}
 
@@ -502,11 +525,20 @@ namespace NavierStokes{
 				++line_search_n; // increment line search number
 			}
 		}
-		// output result decides wheter to store or not results.
-		if (output_result) {
-			output_results();
-			// process_solution(); no need for now of this function call
-		}
+
+
+
+
+		   // Distribute constraints to present_solution after Newton convergence
+		   nonzero_constraints.distribute(present_solution);
+
+
+		   
+		   // output result decides wheter to store or not results.
+		   if (output_result) {
+			   output_results();
+			   // process_solution(); no need for now of this function call
+		   }
 	}
 	
 	/** @brief Function that computes the initial guess when the Reynolds number is over 1000
@@ -553,11 +585,11 @@ namespace NavierStokes{
 		data_out.add_data_vector(partitioning, "partitioning");
 		data_out.build_patches();
 	
-		// here to insert correct ReyNolds Number aswell REMEMBER THIS 
+		// here to insert correct Reynolds Number aswell REMEMBER THIS 
 		const std::string output_file_name = std::to_string(static_cast<int>(std::round(1.0 / viscosity))) + "Re-SNS_Solution";
 		data_out.write_vtu_with_pvtu_record("../results/",
 											output_file_name,
-											0,
+											timestep_number,
 											MPI_COMM_WORLD);
 	
 		pcout << "Output written to " << output_file_name << "." << std::endl;
@@ -619,7 +651,35 @@ namespace NavierStokes{
 			newton_iteration(1e-12, 50, true, true);
 		}
 	}
+
+	template <int dim>
+	void NonStationaryNavierStokes<dim>::run_time_simulation(){
+		// Setting up initial conditions
+		{
+			initialize_system();
+
+			time = 0.0;
+			timestep_number = 0;
+
+			output_results();
+		}
+
+		pcout << "===============================================" << std::endl;
+
+		while(time < T -0.5*delta_t){
+			time += delta_t;
+			++timestep_number;
+
+			pcout << "\nTime step " << timestep_number << ", time = " << time << std::endl;
+
+			// Set old_solution to present_solution (store previous time step)
+			old_solution = present_solution;
+
+			// Assemble and solve the nonlinear system for this time step
+			newton_iteration(1e-12, 50, true, true);
+		}
+	}
 	
-	// Explicit instantiation for dim=2
+	// Explicit instantiation for dim=3
 	template class NonStationaryNavierStokes<3>;	
 };
