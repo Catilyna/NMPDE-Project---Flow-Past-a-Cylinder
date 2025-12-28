@@ -246,12 +246,6 @@ namespace NavierStokes{
 		std::vector<Tensor<1, dim>> old_velocity_values(n_q_points);
 		std::vector<Tensor<2, dim>> old_velocity_gradients(n_q_points);
 		std::vector<double> old_pressure_values(n_q_points);
-
-		// extract old solution values at quadrature points
-		/*fe_values[velocities].get_function_values(old_solution, old_velocity_values);
-		fe_values[velocities].get_function_gradients(old_solution, old_velocity_gradients);
-		fe_values[pressure].get_function_values(old_solution, old_pressure_values);*/
-
 	
 		// vectors used to store values of the test functions
 		std::vector<double> div_phi_u(dofs_per_cell);  			// divergence of velocity
@@ -268,7 +262,6 @@ namespace NavierStokes{
 			local_matrix         = 0.0;
 			cell_pressure_mass_matrix = 0.0;
 			local_rhs            = 0.0;
-	
 
 			// We need to know the values and the gradient of velocity on quadrature nodes (explained by Bucelli)
 			fe_values[velocities].get_function_values(evaluation_point, present_velocity_values);
@@ -280,11 +273,12 @@ namespace NavierStokes{
     		fe_values[velocities].get_function_gradients(old_solution, old_velocity_gradients);
     		fe_values[pressure].get_function_values(old_solution, old_pressure_values);
 	
+			/* DEBUGGING PURPOSES CODE
 			for (const auto& tensor : present_velocity_gradients) {
 			if (std::isinf(tensor.norm())) {
 				pcout << "TROVATO GRADIENTE INFINITO NELLA CELLA: " << cell->active_cell_index() << std::endl;
 				}
-			}
+			}*/
 			for (unsigned int q = 0; q < n_q_points; ++q) {
 				   for (unsigned int k = 0; k < dofs_per_cell; ++k) {
 					   div_phi_u[k] = fe_values[velocities].divergence(k, q);
@@ -295,31 +289,42 @@ namespace NavierStokes{
 				   for (unsigned int i = 0; i < dofs_per_cell; ++i) {
 					   if (assemble_matrix) {
 						   for (unsigned int j = 0; j < dofs_per_cell; ++j) {
-							   // time derivative term (theta-weighted)
-							   local_matrix(i, j) += theta * (1.0 / delta_t) * phi_u[i] * phi_u[j] * fe_values.JxW(q);
+							    // time derivative term (theta-weighted)
+							    local_matrix(i, j) +=  (1.0 / delta_t) * phi_u[i] * phi_u[j] * fe_values.JxW(q);
+								// apply theta just to spacial terms
 
-							// present term (* theta)
-							local_matrix(i, j) += theta * (viscosity * scalar_product(grad_phi_u[i], grad_phi_u[j])
-													 + phi_u[i] * (present_velocity_gradients[q] * phi_u[j]) 
+								// present term (* theta)
+								local_matrix(i, j) += theta * (viscosity * scalar_product(grad_phi_u[i], grad_phi_u[j])
+													+ phi_u[i] * (present_velocity_gradients[q] * phi_u[j]) 
 													+ phi_u[i] * (grad_phi_u[j] * present_velocity_values[q])
-													- div_phi_u[i] * phi_p[j] - phi_p[i] * div_phi_u[j] 
-													+ gamma * div_phi_u[i] * div_phi_u[j]) * fe_values.JxW(q); // here there was this term here: phi_p[i] * phi_p[j] used in pressure matrix
+													- div_phi_u[i] * phi_p[j] 
+													- phi_p[i] * div_phi_u[j] 
+													+ gamma * div_phi_u[i] * div_phi_u[j])
+													* fe_values.JxW(q); // here there was this term here: phi_p[i] * phi_p[j] used in pressure matrix
 							
-							// added this, exactly how Bucelli implemented it. Dont know if it's mathematically correct tough
-							cell_pressure_mass_matrix(i, j) += phi_p[i] * phi_p[j] * fe_values.JxW(q);
+								// added this, exactly how Bucelli implemented it. Dont know if it's mathematically correct tough
+								cell_pressure_mass_matrix(i, j) += phi_p[i] * phi_p[j] * fe_values.JxW(q);
 						}
 					}
 					double present_velocity_divergence = trace(present_velocity_gradients[q]);
 					double old_velocity_divergence = trace(old_velocity_gradients[q]);
 					// time derivative term (is (1-theta) here necessary?)
 					local_rhs(i) += (1.0 / delta_t) * phi_u[i] * old_velocity_values[q] * fe_values.JxW(q);
-					// old term (* (1 - theta))
+					// old term (* (1 - theta)) = (1- theta)*A*old_sol 
 					local_rhs(i) -= (1.0 - theta) * (
 						viscosity * scalar_product(grad_phi_u[i], old_velocity_gradients[q])
 						+ phi_u[i] * (old_velocity_gradients[q] * old_velocity_values[q])
-						- div_phi_u[i] * old_pressure_values[q] - phi_p[i] * trace(old_velocity_gradients[q])
-						+ gamma * div_phi_u[i] * trace(old_velocity_gradients[q])
-					) * fe_values.JxW(q);
+						- div_phi_u[i] * old_pressure_values[q]
+						- phi_p[i] * old_velocity_divergence
+						+ gamma * div_phi_u[i] * old_velocity_divergence) 
+						* fe_values.JxW(q);
+					local_rhs(i) -= (theta) * (
+						viscosity * scalar_product(grad_phi_u[i], present_velocity_gradients[q])
+						+ phi_u[i] * (present_velocity_gradients[q] * present_velocity_values[q])
+						- div_phi_u[i] + present_pressure_values[q]
+						- phi_p[i] * present_velocity_divergence
+						+ gamma * div_phi_u[i] * present_velocity_divergence)
+						* fe_values.JxW(q); 
 				}
 			}
 
@@ -332,7 +337,6 @@ namespace NavierStokes{
 
 						for (size_t q = 0; q < n_q_face; ++q){
 							for (size_t i = 0; i < dofs_per_cell; ++i){
-									// 
 									local_rhs(i) += -p_out * 
 										scalar_product(fe_face_values.normal_vector(q),
 										fe_face_values[velocities].value(i, q)) * fe_face_values.JxW(q);

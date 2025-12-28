@@ -257,7 +257,6 @@ namespace NavierStokes{
 			local_matrix         = 0.0;
 			cell_pressure_mass_matrix = 0.0;
 			local_rhs            = 0.0;
-	
 
 			// We need to know the values and the gradient of velocity on quadrature nodes (explained by Bucelli)
 			fe_values[velocities].get_function_values(evaluation_point, present_velocity_values);
