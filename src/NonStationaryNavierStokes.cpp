@@ -321,7 +321,7 @@ namespace NavierStokes{
 					local_rhs(i) -= (theta) * (
 						viscosity * scalar_product(grad_phi_u[i], present_velocity_gradients[q])
 						+ phi_u[i] * (present_velocity_gradients[q] * present_velocity_values[q])
-						- div_phi_u[i] + present_pressure_values[q]
+						- div_phi_u[i] * present_pressure_values[q]
 						- phi_p[i] * present_velocity_divergence
 						+ gamma * div_phi_u[i] * present_velocity_divergence)
 						* fe_values.JxW(q); 
@@ -484,12 +484,15 @@ namespace NavierStokes{
 		double last_res = 1.0;
 		double current_res = 1.0;
 
+		if(is_initial_step){
+			evaluation_point = present_solution;
+			nonzero_constraints.distribute(evaluation_point);
+		}
+
 		// main loop here that controls the nonlinear solver given a tolerance
 		while ((first_step || (current_res > tolerance)) && line_search_n < max_n_line_searches) {
 			if (first_step) {
-				// initialize and assemble the system in the first iter
-				initialize_system();
-				evaluation_point = present_solution;
+				//assemble the system in the first iter
 				assemble_system(first_step);
 
 				solve(first_step);
@@ -502,7 +505,6 @@ namespace NavierStokes{
 				pcout << "The residual of initial guess is " << current_res << std::endl;
 				last_res = current_res;
 			} else {
-				evaluation_point = present_solution;
 				assemble_system(first_step);
 				solve(first_step);
 
@@ -590,7 +592,7 @@ namespace NavierStokes{
 		data_out.build_patches();
 	
 		// here to insert correct Reynolds Number aswell REMEMBER THIS 
-		const std::string output_file_name = std::to_string(static_cast<int>(std::round(1.0 / viscosity))) + "Re-SNS_Solution";
+		const std::string output_file_name = std::to_string(static_cast<int>(std::round(1.0 / viscosity))) + "Re-NS_Solution";
 		data_out.write_vtu_with_pvtu_record("../results/",
 											output_file_name,
 											timestep_number,
@@ -660,11 +662,16 @@ namespace NavierStokes{
 	template <int dim>
 	void NonStationaryNavierStokes<dim>::set_initial_condition()
 	{
-		// Interpolate custom initial condition: inlet profile at inlet, zero elsewhere
-		VectorTools::interpolate(dof_handler, initial_condition, present_solution);
-		old_solution = present_solution;
-		nonzero_constraints.distribute(present_solution);
-		nonzero_constraints.distribute(old_solution);
+		pcout << "Setting initial condition to zero..." << std::endl;
+		
+		// Simple zero initial condition
+		present_solution = 0.0;
+		old_solution = 0.0;
+		
+		// Boundary conditions will be enforced during assembly
+		// through the constraints system
+		
+		pcout << "  Zero initial condition set." << std::endl;
 	}
 
 	/** @brief Function that runs the time simulation loop */
@@ -680,8 +687,13 @@ namespace NavierStokes{
 		}
 
 		pcout << "===============================================" << std::endl;
+		pcout << "Starting time simulation with " 
+              << "delta_t = " << delta_t 
+              << ", T = " << T 
+              << ", theta = " << theta 
+              << std::endl;
 
-		while(time < T -0.5*delta_t){
+		while(time < T - 0.5*delta_t){
 			time += delta_t;
 			++timestep_number;
 
@@ -690,9 +702,15 @@ namespace NavierStokes{
 			// Set old_solution to present_solution (store previous time step)
 			old_solution = present_solution;
 
+			//check if it is the initial step
+			const bool is_initial_step = (timestep_number == 1);
+
 			// Assemble and solve the nonlinear system for this time step
-			newton_iteration(1e-12, 50, true, true);
+			newton_iteration(1e-6, 30, is_initial_step, true);
 		}
+		
+		pcout << "Time simulation complete." << std::endl;
+		pcout << "===============================================" << std::endl;
 	}
 	
 	// Explicit instantiation for dim=3

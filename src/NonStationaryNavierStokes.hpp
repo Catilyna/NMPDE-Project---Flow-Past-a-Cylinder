@@ -42,6 +42,7 @@
 #include <deal.II/numerics/error_estimator.h>
 #include <deal.II/numerics/matrix_tools.h>
 #include <deal.II/numerics/solution_transfer.h>
+#include <deal.II/numerics/vector_tools_boundary.h>
 
 #include <deal.II/lac/sparse_direct.h>
 #include <deal.II/lac/sparse_ilu.h>
@@ -51,6 +52,8 @@
 #include <fstream>
 #include <iostream>
 #include <vector>
+
+#include "preconditioners/BlockSchurPreconditioner.hpp"
 
 using namespace dealii;
 
@@ -137,6 +140,7 @@ namespace NavierStokes{
             , T(T_)
             , delta_t(delta_t_)
             , theta(theta_)
+            , gamma(delta_t)
             , mesh(MPI_COMM_WORLD)
         {};
 
