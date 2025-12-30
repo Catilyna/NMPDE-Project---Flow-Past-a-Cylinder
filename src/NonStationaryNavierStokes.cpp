@@ -531,15 +531,9 @@ namespace NavierStokes{
 				++line_search_n; // increment line search number
 			}
 		}
-
-
-
-
 		   // Distribute constraints to present_solution after Newton convergence
 		   nonzero_constraints.distribute(present_solution);
-
-
-		   
+  
 		   // output result decides wheter to store or not results.
 		   if (output_result) {
 			   output_results();
@@ -592,8 +586,10 @@ namespace NavierStokes{
 		data_out.build_patches();
 	
 		// here to insert correct Reynolds Number aswell REMEMBER THIS 
-		const std::string output_file_name = std::to_string(static_cast<int>(std::round(1.0 / viscosity))) + "Re-NS_Solution";
-		data_out.write_vtu_with_pvtu_record("../results/",
+		const std::string output_file_name = std::to_string(static_cast<int>(std::round(1.0 / viscosity))) 
+															+ "Re-NS_Solution_" 
+															+ std::to_string(timestep_number);
+		data_out.write_vtu_with_pvtu_record("../results/common/", // save all the solutions relative to a single execution in a folder
 											output_file_name,
 											timestep_number,
 											MPI_COMM_WORLD);
@@ -629,34 +625,6 @@ namespace NavierStokes{
 			f << std::endl;
 		}
 	}
-	
-	/** @brief Method that actually run the whole method calling the newton iteration.  
-	 *  With really high Reynolds Number (not the case for us I guess) it also computes
-	 *  an initial guess calling the "compute_initial_guess" function.
-	*/
-	template <int dim>
-	void NonStationaryNavierStokes<dim>::run()
-	{
-		// GridGenerator::hyper_cube(mesh); This generated an hypercube but this is not our case
-
-		//	This function here redefines each cell for each time you specify the 'times'
-		//  argument. Actually we dont need it as our mesh is interpreted in parallel and 
-		//  it has already been computed by gmsh.
-		//  mesh.refine_global(1); 
-
-		const double Re = 1.0 / viscosity;
-		if (Re > 1000.0) {
-			pcout << "Searching for initial guess ..." << std::endl;
-			const double step_size = 2000.0;
-			compute_initial_guess(step_size);
-			pcout << "Found initial guess." << std::endl;
-			pcout << "Computing solution with target Re = " << Re << std::endl;
-			viscosity = 1.0 / Re;
-			newton_iteration(1e-12, 50, false, true);
-		} else {
-			newton_iteration(1e-12, 50, true, true);
-		}
-	}
 
 	/** @brief Set the initial condition for present_solution and old_solution. */
 	template <int dim>
@@ -683,14 +651,14 @@ namespace NavierStokes{
 			set_initial_condition();
 			time = 0.0;
 			timestep_number = 0;
-			output_results();
+			// output_results(); I didnt get why we save result here
 		}
 
 		pcout << "===============================================" << std::endl;
-		pcout << "Starting time simulation with " 
-              << "delta_t = " << delta_t 
-              << ", T = " << T 
-              << ", theta = " << theta 
+		pcout << "Starting time simulation with: "
+              << "\ndelta_t = " << delta_t 
+              << "\nT = " << T 
+              << "\ntheta = " << theta 
               << std::endl;
 
 		while(time < T - 0.5*delta_t){
