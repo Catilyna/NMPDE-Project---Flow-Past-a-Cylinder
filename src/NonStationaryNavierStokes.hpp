@@ -78,7 +78,7 @@ namespace NavierStokes{
             virtual void
             vector_value(const Point<dim> &p, Vector<double> &values) const override
             {
-            values[0] = 1.0;
+            values[0] = 0.01;
 
             for (unsigned int i = 1; i < dim + 1; ++i)
                 values[i] = 0.0 + p[0] * 0.0;
@@ -88,7 +88,7 @@ namespace NavierStokes{
             value(const Point<dim> &p, const unsigned int component = 0) const override
             {
             if (component == 0)
-                return 1.0 + p[0] * 0.0; // added jsut because I didnt want warning by compiler
+                return 0.01 + p[0] * 0.0; // added jsut because I didnt want warning by compiler
             else 
                 return 0.0;
             }
@@ -177,7 +177,7 @@ namespace NavierStokes{
         void run();
 
         // problem related values setup
-        double viscosity = 1.;
+        double viscosity = 30.;
         double p_out = 1.;
         double gamma;
         const unsigned int degree_velocity;

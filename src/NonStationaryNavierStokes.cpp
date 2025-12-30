@@ -9,6 +9,10 @@
 
 namespace NavierStokes{
 	
+// Helper for .pvd file management
+#include <cstdio>
+#include <sstream>
+
 	template <int dim>
 	void NonStationaryNavierStokes<dim>::initialize_system()
 	{
@@ -289,42 +293,50 @@ namespace NavierStokes{
 				   for (unsigned int i = 0; i < dofs_per_cell; ++i) {
 					   if (assemble_matrix) {
 						   for (unsigned int j = 0; j < dofs_per_cell; ++j) {
-							    // time derivative term (theta-weighted)
+							    // time derivative term (1/delta_t)<u,v>
 							    local_matrix(i, j) +=  (1.0 / delta_t) * phi_u[i] * phi_u[j] * fe_values.JxW(q);
-								// apply theta just to spacial terms
 
-								// present term (* theta)
-								local_matrix(i, j) += theta * (viscosity * scalar_product(grad_phi_u[i], grad_phi_u[j])
-													+ phi_u[i] * (present_velocity_gradients[q] * phi_u[j]) 
-													+ phi_u[i] * (grad_phi_u[j] * present_velocity_values[q])
-													- div_phi_u[i] * phi_p[j] 
-													- phi_p[i] * div_phi_u[j] 
-													+ gamma * div_phi_u[i] * div_phi_u[j])
-													* fe_values.JxW(q); // here there was this term here: phi_p[i] * phi_p[j] used in pressure matrix
-							
-								// added this, exactly how Bucelli implemented it. Dont know if it's mathematically correct tough
+								// Viscous term (theta * nu * <grad u, grad v>)
+								local_matrix(i, j) += theta * viscosity * scalar_product(grad_phi_u[i], grad_phi_u[j]) * fe_values.JxW(q);
+
+								// Convective term (theta[< (grad u) u , v > + < (grad v) u, v >]), linearized 
+								local_matrix(i, j) += theta * ( scalar_product(phi_u[i], present_velocity_gradients[q] * phi_u[j]) +  
+								scalar_product(phi_u[i], grad_phi_u[j] * present_velocity_values[q])   
+															  ) * fe_values.JxW(q);
+								
+								// Pressure terms (- theta < div v, q > - theta < div u, p >)
+								local_matrix(i, j) -= theta * (div_phi_u[i] * phi_p[j] * fe_values.JxW(q) 
+															  + phi_p[i] * div_phi_u[j] * fe_values.JxW(q));
+
+								// added this, exactly how Bucelli implemented it. Seems to be needed for preconditioner stability
 								cell_pressure_mass_matrix(i, j) += phi_p[i] * phi_p[j] * fe_values.JxW(q);
 						}
 					}
 					double present_velocity_divergence = trace(present_velocity_gradients[q]);
 					double old_velocity_divergence = trace(old_velocity_gradients[q]);
-					// time derivative term (is (1-theta) here necessary?)
-					local_rhs(i) += (1.0 / delta_t) * phi_u[i] * old_velocity_values[q] * fe_values.JxW(q);
-					// old term (* (1 - theta)) = (1- theta)*A*old_sol 
-					local_rhs(i) -= (1.0 - theta) * (
-						viscosity * scalar_product(grad_phi_u[i], old_velocity_gradients[q])
-						+ phi_u[i] * (old_velocity_gradients[q] * old_velocity_values[q])
-						- div_phi_u[i] * old_pressure_values[q]
-						- phi_p[i] * old_velocity_divergence
-						+ gamma * div_phi_u[i] * old_velocity_divergence) 
+					// time derivative term (1/delta_t) < new_u - old_u, v >
+					local_rhs(i) += (1.0 / delta_t) * scalar_product(phi_u[i], 
+										present_velocity_values[q] - old_velocity_values[q]) * fe_values.JxW(q);
+
+					// Viscous term ((theta)* nu * <grad u_new, grad v> + (1-theta) * nu * <grad u_old, grad v>)
+					local_rhs(i) += viscosity * (
+						theta * scalar_product(grad_phi_u[i], present_velocity_gradients[q])
+						+ (1.0 - theta) * scalar_product(grad_phi_u[i], old_velocity_gradients[q]))
 						* fe_values.JxW(q);
-					local_rhs(i) -= (theta) * (
-						viscosity * scalar_product(grad_phi_u[i], present_velocity_gradients[q])
-						+ phi_u[i] * (present_velocity_gradients[q] * present_velocity_values[q])
-						- div_phi_u[i] * present_pressure_values[q]
-						- phi_p[i] * present_velocity_divergence
-						+ gamma * div_phi_u[i] * present_velocity_divergence)
-						* fe_values.JxW(q); 
+					
+					// Convective term (theta) [< (grad u_new) u_new , v >] + (1-theta) [< (grad u_old) u_old , v >]
+					local_rhs(i) += (theta) * phi_u[i] * (present_velocity_gradients[q] * present_velocity_values[q])
+						* fe_values.JxW(q);
+					local_rhs(i) += (1.0 - theta) * phi_u[i] * (old_velocity_gradients[q] * old_velocity_values[q])
+						* fe_values.JxW(q);
+					
+					// Pressure terms - (theta) [ < div v, p_new > ] - (1-theta) [< div v, p_old > ]
+					local_rhs(i) -= (theta) * div_phi_u[i] * present_pressure_values[q] * fe_values.JxW(q);
+					local_rhs(i) -= (1.0 - theta) * div_phi_u[i] * old_pressure_values[q] * fe_values.JxW(q);
+
+					// Continuity terms -theta [ < q, div u_new > ] - (1-theta) [ < q, div u_old > ]
+					local_rhs(i) -= (theta) * phi_p[i] * present_velocity_divergence * fe_values.JxW(q);
+					local_rhs(i) -= (1.0 - theta) * phi_p[i] * old_velocity_divergence * fe_values.JxW(q);
 				}
 			}
 
@@ -351,23 +363,6 @@ namespace NavierStokes{
 			// this object here holds a list on constraint based on the fact wheter
 			// this is the initial step or not.
 			const AffineConstraints<double> &constraints_used = initial_step ? nonzero_constraints : zero_constraints;
-			
-			/* Debug prints for segmentation fault investigation
-			pcout << "[DEBUG] local_matrix size: " << local_matrix.m() << "x" << local_matrix.n() << std::endl;
-			pcout << "[DEBUG] local_rhs size: " << local_rhs.size() << std::endl;
-			pcout << "[DEBUG] local_dof_indices size: " << local_dof_indices.size() << std::endl;
-			pcout << "[DEBUG] First 10 local_dof_indices: ";
-			for (size_t dbg_i = 0; dbg_i < std::min<size_t>(10, local_dof_indices.size()); ++dbg_i) {
-				pcout << local_dof_indices[dbg_i] << " ";
-			}
-			pcout << std::endl;
-			// Print min/max of local_dof_indices
-			auto minmax = std::minmax_element(local_dof_indices.begin(), local_dof_indices.end());
-			pcout << "[DEBUG] local_dof_indices min: " << *minmax.first << ", max: " << *minmax.second << std::endl;
-			// Print global system matrix/vector sizes
-			pcout << "[DEBUG] system_matrix.m(): " << system_matrix.m() << ", n(): " << system_matrix.n() << std::endl;
-			pcout << "[DEBUG] system_rhs.size(): " << system_rhs.size() << std::endl;
-			*/
 			
 			if (assemble_matrix) {
 				constraints_used.distribute_local_to_global(local_matrix, local_rhs, local_dof_indices, system_matrix, system_rhs);
@@ -494,7 +489,7 @@ namespace NavierStokes{
 			if (first_step) {
 				//assemble the system in the first iter
 				assemble_system(first_step);
-
+				system_rhs *= -1.0; // we need to solve for -F(u), so we change the sign here
 				solve(first_step);
 				present_solution = newton_update;
 				nonzero_constraints.distribute(present_solution);
@@ -506,6 +501,7 @@ namespace NavierStokes{
 				last_res = current_res;
 			} else {
 				assemble_system(first_step);
+				system_rhs *= -1.0; // we need to solve for -F(u), so we change the sign here
 				solve(first_step);
 
 				// interesting backtracking approach, instead of taking a fixed alpha for the newton iter it halves
@@ -593,7 +589,7 @@ namespace NavierStokes{
 											output_file_name,
 											timestep_number,
 											MPI_COMM_WORLD);
-	
+
 		pcout << "Output written to " << output_file_name << "." << std::endl;
 		pcout << "===============================================" << std::endl;
 	}
@@ -674,7 +670,7 @@ namespace NavierStokes{
 			const bool is_initial_step = (timestep_number == 1);
 
 			// Assemble and solve the nonlinear system for this time step
-			newton_iteration(1e-6, 30, is_initial_step, true);
+			newton_iteration(1e-5, 30, is_initial_step, true);
 		}
 		
 		pcout << "Time simulation complete." << std::endl;
