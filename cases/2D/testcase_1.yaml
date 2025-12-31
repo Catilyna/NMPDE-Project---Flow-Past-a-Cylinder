@@ -27,7 +27,7 @@ physics:
 
   boundary_conditions:
     inlet:
-      type: "parabolic_velocity" # Custom type handled by your solver
+      type: "parabolic_velocity" 
       u_mean: 0.3                # Mean velocity
     outlet:
       type: "pressure_outlet"

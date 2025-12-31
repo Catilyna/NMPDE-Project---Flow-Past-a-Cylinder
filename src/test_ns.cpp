@@ -17,8 +17,8 @@ int main(int argc, char* argv[])
 
     const unsigned int degree_velocity = 2;
     const unsigned int degree_pressure = 1;
-    const double T = 0.01;                // final time (changed it for now just to save time)
-    const double delta_t = 0.0001;        // time step size
+    const double T = 0.01;              // final time (changed it for now just to save time)
+    const double delta_t = 0.0004;        // time step size
     const double theta = 1.0;          // parameter for the theta-method
 
     try {

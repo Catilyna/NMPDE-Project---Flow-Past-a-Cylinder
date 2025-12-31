@@ -583,8 +583,7 @@ namespace NavierStokes{
 	
 		// here to insert correct Reynolds Number aswell REMEMBER THIS 
 		const std::string output_file_name = std::to_string(static_cast<int>(std::round(1.0 / viscosity))) 
-															+ "Re-NS_Solution_" 
-															+ std::to_string(timestep_number);
+															+ "Re-NS_Solution_";
 		data_out.write_vtu_with_pvtu_record("../results/common/", // save all the solutions relative to a single execution in a folder
 											output_file_name,
 											timestep_number,

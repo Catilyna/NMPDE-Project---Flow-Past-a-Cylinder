@@ -78,7 +78,7 @@ namespace NavierStokes{
             virtual void
             vector_value(const Point<dim> &p, Vector<double> &values) const override
             {
-            values[0] = 0.01;
+            values[0] = 0.1;
 
             for (unsigned int i = 1; i < dim + 1; ++i)
                 values[i] = 0.0 + p[0] * 0.0;
@@ -177,8 +177,8 @@ namespace NavierStokes{
         void run();
 
         // problem related values setup
-        double viscosity = 30.;
-        double p_out = 1.;
+        double viscosity = 10.;
+        double p_out = 10;
         double gamma;
         const unsigned int degree_velocity;
         const unsigned int degree_pressure;
