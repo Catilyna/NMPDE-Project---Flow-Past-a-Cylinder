@@ -52,6 +52,7 @@
 #include <fstream>
 #include <iostream>
 #include <vector>
+#include <cmath>
 
 #include "preconditioners/BlockSchurPreconditioner.hpp"
 
@@ -71,37 +72,68 @@ namespace NavierStokes{
         class InletVelocity : public Function<dim>
         {
         public:
-            InletVelocity()
+            InletVelocity(const double U_mean)
             : Function<dim>(dim + 1)
-            {}
+            , U_mean(U_mean)
+            {};
 
             virtual void
             vector_value(const Point<dim> &p, Vector<double> &values) const override
             {
-            values[0] = 0.1;
+                double current_time = this->get_time();
 
-            for (unsigned int i = 1; i < dim + 1; ++i)
-                values[i] = 0.0 + p[0] * 0.0;
+                double ramp_duration = 0.5;                
+                double time_factor = 0.0;
+                if (current_time < ramp_duration) {
+                    time_factor = std::sin((M_PI/2.0) * (current_time / ramp_duration) );
+                } else {
+                    time_factor = 1.0;
+                }
+                values[0] = 4 * U_mean * p[1] * (H - p[1]) * time_factor / (H*H);
+
+                for (unsigned int i = 1; i < dim + 1; ++i)
+                    values[i] = 0.0;
             }
 
             virtual double
             value(const Point<dim> &p, const unsigned int component = 0) const override
             {
-            if (component == 0)
-                return 0.01 + p[0] * 0.0; // added jsut because I didnt want warning by compiler
-            else 
-                return 0.0;
+                // 1. Copy the time logic exactly as it is in vector_value
+                double current_time = this->get_time();
+                double ramp_duration = 0.5;
+                
+                double time_factor = 0.0;
+                if (current_time < ramp_duration) {
+                    time_factor = std::sin((M_PI/2.0) * (current_time / ramp_duration));
+                } else {
+                    time_factor = 1.0;
+                }
+
+                // 2. Return the value for the requested component
+                if (component == 0) {
+                    return 4 * U_mean * p[1] * (H - p[1]) * time_factor / (H*H);
+                }
+                else {
+                    // All other components (y-velocity, z-velocity, pressure) are zero
+                    return 0.0;
+                }
             }
 
         protected:
+            const double U_mean;
+            const double H = 0.41; // Height is 0.41 in both 2D and 3D 
             const double alpha = 1.0;
         };
 
-        /** @brief Initial condition: inlet profile at inlet, zero elsewhere. */
+        /** @brief Initial condition: inlet profile at inlet, zero elsewhere. 
+         * ARE WE USING THIS?
+        */
         class InitialCondition : public Function<dim>
         {
         public:
-            InitialCondition() : Function<dim>(dim + 1) {}
+            InitialCondition() 
+                : Function<dim>(dim + 1) 
+                {};
 
             virtual void vector_value(const Point<dim> &p, Vector<double> &values) const override
             {
@@ -129,7 +161,8 @@ namespace NavierStokes{
                             const unsigned int &degree_pressure_,
                             const double &T_,
                             const double &delta_t_,
-                            const double &theta_
+                            const double &theta_,
+                            const double &U_mean
                         )
             : mpi_size(Utilities::MPI::n_mpi_processes(MPI_COMM_WORLD))
             , mpi_rank(Utilities::MPI::this_mpi_process(MPI_COMM_WORLD))
@@ -140,7 +173,8 @@ namespace NavierStokes{
             , T(T_)
             , delta_t(delta_t_)
             , theta(theta_)
-            , gamma(delta_t)
+            , gamma(delta_t) // why??
+            , inlet_velocity(U_mean)
             , mesh(MPI_COMM_WORLD)
         {};
 
@@ -192,7 +226,7 @@ namespace NavierStokes{
 
         InletVelocity inlet_velocity;
 
-        InitialCondition initial_condition;
+        // InitialCondition initial_condition; ARE WE USING THIS??
 
         std::vector<types::global_dof_index> dofs_per_block;
 

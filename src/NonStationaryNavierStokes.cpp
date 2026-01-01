@@ -659,6 +659,9 @@ namespace NavierStokes{
 		while(time < T - 0.5*delta_t){
 			time += delta_t;
 			++timestep_number;
+			
+			// se the inlet velocity inner time to the time of the simulation
+			inlet_velocity.set_time(time);
 
 			pcout << "\nTime step " << timestep_number << ", time = " << time << std::endl;
 
