@@ -151,7 +151,7 @@ namespace NavierStokes{
 	template<int dim>
 	void NonStationaryNavierStokes<dim>::setup_boundaries()
 	{
-		pcout << "Setup Boundaries." << std::endl;
+		// pcout << "Setup Boundaries." << std::endl;
 
 		nonzero_constraints.clear();
     	DoFTools::make_hanging_node_constraints(dof_handler, nonzero_constraints);
@@ -662,6 +662,7 @@ namespace NavierStokes{
 			
 			// se the inlet velocity inner time to the time of the simulation
 			inlet_velocity.set_time(time);
+			setup_boundaries();
 
 			pcout << "\nTime step " << timestep_number << ", time = " << time << std::endl;
 

@@ -17,10 +17,10 @@ int main(int argc, char* argv[])
 
     const unsigned int degree_velocity = 2;
     const unsigned int degree_pressure = 1;
-    const double T = 1.0;              // final time (changed it for now just to save time)
-    const double delta_t = 0.04;        // time step size
+    const double T = .5;              // final time (changed it for now just to save time)
+    const double delta_t = 0.001;        // time step size
     const double theta = 1.0;          // parameter for the theta-method
-    const double U_mean = 0.45;
+    const double U_mean = 0.01;
 
     try {
             NonStationaryNavierStokes<3> flow(mesh_file_name, degree_velocity, degree_pressure, T, delta_t, theta, U_mean);

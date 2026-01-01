@@ -82,14 +82,14 @@ namespace NavierStokes{
             {
                 double current_time = this->get_time();
 
-                double ramp_duration = 0.5;                
+                double ramp_duration = 0.1;                
                 double time_factor = 0.0;
                 if (current_time < ramp_duration) {
                     time_factor = std::sin((M_PI/2.0) * (current_time / ramp_duration) );
                 } else {
                     time_factor = 1.0;
                 }
-                values[0] = 4 * U_mean * p[1] * (H - p[1]) * time_factor / (H*H);
+                values[0] = 16 * U_mean * p[1] * p[2] *(H - p[1]) * (H - p[2]) * time_factor / std::pow(H, 4.);
 
                 for (unsigned int i = 1; i < dim + 1; ++i)
                     values[i] = 0.0;
@@ -111,7 +111,8 @@ namespace NavierStokes{
 
                 // 2. Return the value for the requested component
                 if (component == 0) {
-                    return 4 * U_mean * p[1] * (H - p[1]) * time_factor / (H*H);
+                    return 16 * U_mean * p[1] * p[2] *(H - p[1]) * (H - p[2]) * time_factor / std::pow(H, 4.);
+
                 }
                 else {
                     // All other components (y-velocity, z-velocity, pressure) are zero
