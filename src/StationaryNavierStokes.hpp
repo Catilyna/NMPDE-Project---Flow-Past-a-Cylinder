@@ -60,39 +60,40 @@ namespace NavierStokes{
     class StationaryNavierStokes {
         public:
 
-        /** @brief class that defines the Inlet Velocity object. So the value
-         * of the velocity of the fluid at the inlet (boundary). 
-         * It must be initialized with (dim + 1) component considering
-         * pressure values aswell which will be set to 0.0 .
-         */
-        class InletVelocity : public Function<dim>
-        {
-        public:
-            InletVelocity()
-            : Function<dim>(dim + 1)
-            {}
-
-            virtual void
-            vector_value(const Point<dim> &p, Vector<double> &values) const override
+            /** @brief class that defines the Inlet Velocity object. So the value
+             * of the velocity of the fluid at the inlet (boundary).
+             * It must be initialized with (dim + 1) component considering
+             * pressure values aswell which will be set to 0.0 .
+             */
+            class InletVelocity : public Function<dim>
             {
-            values[0] = 1.0;
+            public:
+                InletVelocity()
+                    : Function<dim>(dim + 1)
+                {
+                }
 
-            for (unsigned int i = 1; i < dim + 1; ++i)
-                values[i] = 0.0 + p[0] * 0.0;
-            }
+                virtual void
+                vector_value(const Point<dim> &p, Vector<double> &values) const override
+                {
+                    values[0] = 1.0;
 
-            virtual double
-            value(const Point<dim> &p, const unsigned int component = 0) const override
-            {
-            if (component == 0)
-                return 1.0 + p[0] * 0.0; // added jsut because I didnt want warning by compiler
-            else 
-                return 0.0;
-            }
+                    for (unsigned int i = 1; i < dim + 1; ++i)
+                        values[i] = 0.0 + p[0] * 0.0;
+                }
 
-        protected:
-            const double alpha = 1.0;
-        };
+                virtual double
+                value(const Point<dim> &p, const unsigned int component = 0) const override
+                {
+                    if (component == 0)
+                        return 1.0 + p[0] * 0.0; // added jsut because I didnt want warning by compiler
+                    else
+                        return 0.0;
+                }
+
+            protected:
+                const double alpha = 1.0;
+            };
 
         StationaryNavierStokes(const std::string &mesh_file_name_,
                             const unsigned int &degree_velocity_,

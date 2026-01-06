@@ -5,13 +5,13 @@
 #include "./preconditioners/BlockSchurPreconditioner.hpp"
 #include "./preconditioners/BlockTriangularPrecondition.hpp"
 #include "./preconditioners/PreconditionIdentity.h"
+// Helper for .pvd file management
+#include <cstdio>
+#include <sstream>
 
 
 namespace NavierStokes{
 	
-// Helper for .pvd file management
-#include <cstdio>
-#include <sstream>
 
 	template <int dim>
 	void NonStationaryNavierStokes<dim>::initialize_system()
@@ -49,6 +49,14 @@ namespace NavierStokes{
 		pcout << "  Quadrature points per cell = " << quadrature->size()
 		<< std::endl;
 		pcout << "  Quadrature points per face = " << quadrature_face->size() << std::endl;
+
+		// Initialize Inlet velocity class based on the boolean value
+		if(time_dependency){
+			inlet_velocity_function = std::make_unique<InletVelocityTime>(U_mean);
+		}
+		else {
+			inlet_velocity_function = std::make_unique<InletVelocity>(U_mean);
+		}
 
 		// SETUP DOFS AND BOUNDARIES
      	setup_dofs();
@@ -132,7 +140,7 @@ namespace NavierStokes{
 		// now get the block dofs for velocity and pressure
 		std::vector<types::global_dof_index> dofs_per_block = DoFTools::count_dofs_per_fe_block(dof_handler, block_component);
 		const unsigned int n_u = dofs_per_block[0]; 
-		const unsigned int n_p = dofs_per_block[1]; 
+		const unsigned int n_p = dofs_per_block[1];
 
 		block_owned_dofs.resize(2);
 		block_relevant_dofs.resize(2);
@@ -151,7 +159,7 @@ namespace NavierStokes{
 	template<int dim>
 	void NonStationaryNavierStokes<dim>::setup_boundaries()
 	{
-		// pcout << "Setup Boundaries." << std::endl;
+		pcout << "Setup Boundaries." << std::endl;
 
 		nonzero_constraints.clear();
     	DoFTools::make_hanging_node_constraints(dof_handler, nonzero_constraints);
@@ -161,7 +169,7 @@ namespace NavierStokes{
 		FEValuesExtractors::Vector velocity(0);
 		ComponentMask velocity_mask = fe->component_mask(velocity);
 								
-		boundary_functions[0] = &inlet_velocity; // Inlet velocity
+		boundary_functions[0] = inlet_velocity_function.get(); // Inlet velocity
 											     // no velocity set at the outlet	
 		boundary_functions[2] = &zero_function;  // Walls
 		boundary_functions[3] = &zero_function;  // Obstacle
@@ -547,7 +555,7 @@ namespace NavierStokes{
 		const double target_Re = 1.0 / viscosity;
 		bool is_initial_step = true;
 		for (double Re = 1000.0; Re < target_Re; Re = std::min(Re + step_size, target_Re)) {
-			viscosity = 1.0 / Re;
+			// viscosity = 1.0 / Re;
 			pcout << "Searching for initial guess with Re = " << Re << std::endl;
 			newton_iteration(1e-12, 50, is_initial_step, false);
 			is_initial_step = false;
@@ -661,7 +669,7 @@ namespace NavierStokes{
 			++timestep_number;
 			
 			// se the inlet velocity inner time to the time of the simulation
-			inlet_velocity.set_time(time);
+			inlet_velocity_function->set_time(time);
 			setup_boundaries();
 
 			pcout << "\nTime step " << timestep_number << ", time = " << time << std::endl;
