@@ -73,31 +73,22 @@ namespace NavierStokes{
             class InletVelocity : public Function<dim>
             {
             public:
-                InletVelocity(const double U_mean)
-                    : Function<dim>(dim + 1), U_mean(U_mean) {};
+                InletVelocity(const double U_mean, double y_max = 0.41, double z_max = 0.41)
+                    : Function<dim>(dim + 1), U_mean(U_mean), y_max(y_max), z_max(z_max) {}
 
                 virtual void
                 vector_value(const Point<dim> &p, Vector<double> &values) const override
                 {
-                    double current_time = this->get_time();
-
-                    double ramp_duration = 0.25;
-                    double time_factor = 0.0;
-                    if (current_time < ramp_duration)
-                    {
-                        time_factor = std::sin((M_PI / 8.0) * (current_time / ramp_duration));
+                    if (dim == 2) {
+                        // 2D: classic parabolic profile
+                        double y = p[1];
+                        values[0] = 4.0 * U_mean * y * (y_max - y) / std::pow(y_max, 2);
+                    } else if (dim == 3) {
+                        // 3D: testcase_1.yaml profile
+                        double y = p[1];
+                        double z = p[2];
+                        values[0] = 16.0 * U_mean * y * z * (y_max - y) * (z_max - z) / std::pow(y_max, 4);
                     }
-                    else
-                    {
-                        time_factor = 1.0;
-                    }
-                    if(dim == 2){
-                        values[0] = 4 * U_mean * p[1] + (H - p[1]) * time_factor / std::pow(H, 2.);
-                    }
-                    else if(dim == 3){
-                        values[0] = 16 * U_mean * p[1] * p[2] * (H - p[1]) * (H - p[2]) * time_factor / std::pow(H, 4.);
-                    }
-
                     for (unsigned int i = 1; i < dim + 1; ++i)
                         values[i] = 0.0;
                 }
@@ -105,41 +96,24 @@ namespace NavierStokes{
                 virtual double
                 value(const Point<dim> &p, const unsigned int component = 0) const override
                 {
-                    // 1. Copy the time logic exactly as it is in vector_value
-                    double current_time = this->get_time();
-                    double ramp_duration = 0.5;
-
-                    double time_factor = 0.0;
-                    if (current_time < ramp_duration)
-                    {
-                        time_factor = std::sin((M_PI / 2.0) * (current_time / ramp_duration));
-                    }
-                    else
-                    {
-                        time_factor = 1.0;
-                    }
-
-                    // 2. Return the value for the requested component
-                    if (component == 0)
-                    {
-                        if(dim == 2){
-                            return 4 * U_mean * p[1] + (H - p[1]) * time_factor / std::pow(H, 2.);
+                    if (component == 0) {
+                        if (dim == 2) {
+                            double y = p[1];
+                            return 4.0 * U_mean * y * (y_max - y) / std::pow(y_max, 2);
+                        } else if (dim == 3) {
+                            double y = p[1];
+                            double z = p[2];
+                            return 16.0 * U_mean * y * z * (y_max - y) * (z_max - z) / std::pow(y_max, 4);
                         }
-                        else if(dim == 3){
-                            return  16 * U_mean * p[1] * p[2] * (H - p[1]) * (H - p[2]) * time_factor / std::pow(H, 4.);
                     }
-                    }
-                    else
-                    {
-                        // All other components (y-velocity, z-velocity, pressure) are zero
-                        return 0.0;
-                    }
+                    // All other components (y-velocity, z-velocity, pressure) are zero
+                    return 0.0;
                 }
 
             protected:
                 const double U_mean;
-                const double H = 0.41; // Height is 0.41 in both 2D and 3D
-                const double alpha = 1.0;
+                const double y_max;
+                const double z_max;
             };
 
             class InletVelocityTime : public Function<dim>

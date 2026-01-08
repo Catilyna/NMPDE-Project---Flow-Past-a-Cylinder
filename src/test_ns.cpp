@@ -74,7 +74,7 @@ int main(int argc, char* argv[])
 
     const unsigned int degree_velocity = 2;
     const unsigned int degree_pressure = 1;
-    const double T = 1.;              
+    const double T = 0.001;              
     const double delta_t = 0.0001;       // time step size
     const bool time_dependency = false;
     try
