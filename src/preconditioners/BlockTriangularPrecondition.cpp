@@ -1,6 +1,6 @@
 #include "BlockTriangularPrecondition.hpp"
 
-#include <deal.II/lac/solver_cg.h>
+#include <deal.II/lac/solver_gmres.h>
 #include <deal.II/lac/solver_control.h>
 
 namespace NavierStokes {
@@ -22,14 +22,13 @@ namespace NavierStokes {
     PreconditionBlockTriangular::vmult(TrilinosWrappers::MPI::BlockVector       &dst,
                                        const TrilinosWrappers::MPI::BlockVector &src) const
     {
-        SolverControl solver_control_velocity(1000, 1e-2 * src.block(0).l2_norm());
+        SolverControl solver_control_velocity(20000, 1e-2 * src.block(0).l2_norm());
         
-        SolverCG<TrilinosWrappers::MPI::Vector> solver_cg_velocity(solver_control_velocity);
-        
-        solver_cg_velocity.solve(*velocity_stiffness,
-                                 dst.block(0),
-                                 src.block(0),
-                                 preconditioner_velocity);
+        SolverGMRES<TrilinosWrappers::MPI::Vector> solver_gmres_velocity(solver_control_velocity);
+        solver_gmres_velocity.solve(*velocity_stiffness,
+                       dst.block(0),
+                       src.block(0),
+                       preconditioner_velocity);
         
         tmp.reinit(src.block(1));
         
@@ -37,14 +36,13 @@ namespace NavierStokes {
         
         tmp.sadd(-1.0, src.block(1));
 
-        SolverControl solver_control_pressure(1000, 1e-2 * src.block(1).l2_norm());
-        
-        SolverCG<TrilinosWrappers::MPI::Vector> solver_cg_pressure(solver_control_pressure);
-        
-        solver_cg_pressure.solve(*pressure_mass,
-                                 dst.block(1),
-                                 tmp,
-                                 preconditioner_pressure);
+        SolverControl solver_control_pressure(20000, 1e-2 * src.block(1).l2_norm());
+            
+        SolverGMRES<TrilinosWrappers::MPI::Vector> solver_gmres_pressure(solver_control_pressure);
+        solver_gmres_pressure.solve(*pressure_mass,
+                       dst.block(1),
+                       tmp,
+                       preconditioner_pressure);
     }
 
 }
