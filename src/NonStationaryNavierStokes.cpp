@@ -404,27 +404,18 @@ namespace NavierStokes{
 		const AffineConstraints<double> &constraints_used = initial_step ? nonzero_constraints : zero_constraints;
 	
 		// initialize object for solving the system
-		SolverControl solver_control(system_matrix.m(), 1e-4 * system_rhs.l2_norm(), true);
+		// Increase max iterations for FGMRES to 200000 for robust convergence
+		SolverControl solver_control(200000, 1e-4 * system_rhs.l2_norm(), true);
 		SolverFGMRES<TrilinosWrappers::MPI::BlockVector> gmres(solver_control);
 		
-		/*
-		// initialize ILU preconditioner with the pressure mass matrix we derived in the assemble() function
+		// initialize ILU preconditioner with the pressure mass matrix (pressure block)
 		TrilinosWrappers::PreconditionILU pmass_preconditioner;
-		pmass_preconditioner.initialize(pressure_mass.block(0,0), 
-					TrilinosWrappers::PreconditionILU::AdditionalData());
+		pmass_preconditioner.initialize(pressure_mass.block(1,1), TrilinosWrappers::PreconditionILU::AdditionalData());
 
-
-		// initialize BlockShurPreconditioner passing the previously computed pmass precondtioner;
+		// initialize BlockSchurPreconditioner passing the previously computed pmass preconditioner
 		const BlockSchurPreconditioner<TrilinosWrappers::PreconditionILU> preconditioner(gamma, viscosity, system_matrix, pressure_mass, pmass_preconditioner);
-		*/
-		
-		PreconditionBlockTriangular preconditioner;
-  		preconditioner.initialize(system_matrix.block(0, 0),
-                            		pressure_mass.block(1, 1),
-                            		system_matrix.block(1, 0));
-		
 
-		// solve using the Shur Preconditioner
+		// solve using the Schur Preconditioner
 		gmres.solve(system_matrix, newton_update, system_rhs, preconditioner);
 		pcout << "FGMRES steps: " << solver_control.last_step() << std::endl;
 		constraints_used.distribute(newton_update);
@@ -689,5 +680,5 @@ namespace NavierStokes{
 	}
 	
 	// Explicit instantiation for dim=3
-	template class NonStationaryNavierStokes<3>;	
+	template class NonStationaryNavierStokes<2>;	
 };

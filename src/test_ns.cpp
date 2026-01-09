@@ -74,12 +74,12 @@ int main(int argc, char* argv[])
 
     const unsigned int degree_velocity = 2;
     const unsigned int degree_pressure = 1;
-    const double T = 1.;              
-    const double delta_t = 0.0001;       // time step size
+    const double T = 8.;              
+    const double delta_t = 0.01;       // time step size
     const bool time_dependency = false;
     try
     {
-        NonStationaryNavierStokes<3> flow(mesh_file_name, degree_velocity, degree_pressure, T, delta_t, theta, U_mean, viscosity, time_dependency);
+        NonStationaryNavierStokes<2> flow(mesh_file_name, degree_velocity, degree_pressure, T, delta_t, theta, U_mean, viscosity, time_dependency);
         flow.run_time_simulation();
         return 0;
     }

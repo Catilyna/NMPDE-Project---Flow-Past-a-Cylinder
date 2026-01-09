@@ -152,45 +152,50 @@ namespace NavierStokes{
                 vector_value(const Point<dim> &p, Vector<double> &values) const override
                 {
                     double current_time = this->get_time();
+                    const double H = 0.41;
+                    double time_factor = std::sin(M_PI * current_time / 8.0);
 
-                    double time_factor{ std::sin((M_PI / 8.0) * (current_time)) };
-                   
-                    if(dim == 2){
-                        values[0] = 4 * U_mean * p[1] + (H - p[1]) * time_factor / std::pow(H, 2.);
-                    } else if(dim == 3){
+                    if (dim == 2) {
+                        values[0] = 4.0 * U_mean * p[1] * (H - p[1]) * time_factor / (H * H);
+                        values[1] = 0.0;
+                    } else if (dim == 3) {
                         values[0] = 16 * U_mean * p[1] * p[2] * (H - p[1]) * (H - p[2]) * time_factor / std::pow(H, 4.);
+                        values[1] = 0.0;
+                        values[2] = 0.0;
                     }
-
-                    for (unsigned int i = 1; i < dim + 1; ++i)
-                        values[i] = 0.0;
+                    // Pressure component
+                    values[dim] = 0.0;
                 }
 
                 virtual double
                 value(const Point<dim> &p, const unsigned int component = 0) const override
                 {
                     double current_time = this->get_time();
+                    const double H = 0.41;
+                    double time_factor = std::sin(M_PI * current_time / 8.0);
 
-                    double time_factor{ std::sin((M_PI / 8.0) * (current_time)) };
-
-                    if (component == 0)
-                    {
-                        if(dim == 2){
-                            return 4 * U_mean * p[1] + (H - p[1]) * time_factor / std::pow(H, 2.);
-                        } else if(dim == 3){
+                    if (dim == 2) {
+                        if (component == 0) {
+                            return 4.0 * U_mean * p[1] * (H - p[1]) * time_factor / (H * H);
+                        } else if (component == 1) {
+                            return 0.0;
+                        } else if (component == 2) {
+                            return 0.0; // pressure
+                        }
+                    } else if (dim == 3) {
+                        if (component == 0) {
                             return 16 * U_mean * p[1] * p[2] * (H - p[1]) * (H - p[2]) * time_factor / std::pow(H, 4.);
+                        } else if (component == 1 || component == 2) {
+                            return 0.0;
+                        } else if (component == 3) {
+                            return 0.0; // pressure
                         }
                     }
-                    else
-                    {
-                        // All other components (y-velocity, z-velocity, pressure) are zero
-                        return 0.0;
-                    }
+                    return 0.0;
                 }
 
             protected:
                 const double U_mean;
-                const double H = 0.41; // Height is 0.41 in both 2D and 3D
-                const double alpha = 1.0;
             };
 
             NonStationaryNavierStokes(const std::string &mesh_file_name_,
