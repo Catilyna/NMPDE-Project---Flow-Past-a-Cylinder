@@ -56,7 +56,7 @@ int main(int argc, char* argv[])
                 return 1;
             }
         }
-        else if(args[i] == '-d') {
+        else if(args[i] == "-d") {
             if(i + 1 < args.size()) {
                 dim = std::stod(args[++i]);
             }else {
@@ -89,8 +89,37 @@ int main(int argc, char* argv[])
     const bool time_dependency = false;
     try
     {
-        NonStationaryNavierStokes<dim> flow(mesh_file_name, degree_velocity, degree_pressure, T, delta_t, theta, U_mean, viscosity, time_dependency);
-        flow.run_time_simulation();
+        if (dim == 2)
+        {
+            NonStationaryNavierStokes<2> flow(mesh_file_name, 
+                                              degree_velocity, 
+                                              degree_pressure, 
+                                              T, 
+                                              delta_t, 
+                                              theta, 
+                                              U_mean, 
+                                              viscosity, 
+                                              time_dependency);
+            flow.run_time_simulation();
+        }
+        else if (dim == 3)
+        {
+            NonStationaryNavierStokes<3> flow(mesh_file_name, 
+                                              degree_velocity, 
+                                              degree_pressure, 
+                                              T, 
+                                              delta_t, 
+                                              theta, 
+                                              U_mean, 
+                                              viscosity, 
+                                              time_dependency);
+            flow.run_time_simulation();
+        }
+        else
+        {
+            std::cerr << "Error: Dimension must be 2 or 3." << std::endl;
+            return 1;
+        }
         return 0;
     }
     catch (std::exception &exc)

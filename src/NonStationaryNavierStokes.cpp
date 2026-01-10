@@ -752,7 +752,7 @@ namespace NavierStokes{
 
 			// Append to a file
 			std::ofstream file;
-			std::string filename = "drag_lift_history.txt";
+			std::string filename = "../results/drag_lift_history.txt";
 			file.open(filename, std::ios::app); // Append mode
 			file << std::scientific << std::setprecision(6) 
 				<< time << "\t" << drag_coeff << "\t" << lift_coeff << std::endl;
