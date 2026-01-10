@@ -588,9 +588,20 @@ namespace NavierStokes{
 		const Vector<double> partitioning(partition_int.begin(), partition_int.end());
 		data_out.add_data_vector(partitioning, "partitioning");
 		data_out.build_patches();
-	
+
+		// Calculate Reynolds number
+		double reynolds_number;
+		if(dim == 2) 
+		{
+			reynolds_number = ( (2.0/3.0) * U_mean * 0.1 ) / viscosity;
+		}
+		else 
+		{
+			reynolds_number = ( (4.0/9.0) * U_mean * 0.1) / viscosity;
+		}
+
 		// here to insert correct Reynolds Number aswell REMEMBER THIS 
-		const std::string output_file_name = std::to_string(static_cast<int>(std::round(1.0 / viscosity))) 
+		const std::string output_file_name = std::to_string(static_cast<int>(std::round(reynolds_number))) 
 															+ "Re-NS_Solution_";
 		data_out.write_vtu_with_pvtu_record("../results/common/", // save all the solutions relative to a single execution in a folder
 											output_file_name,
@@ -644,6 +655,110 @@ namespace NavierStokes{
 		
 		pcout << "  Zero initial condition set." << std::endl;
 	}
+	
+	/** @brief Function to compute the the lift and drag coeffiencts 
+	 */
+	template <int dim>
+	void NonStationaryNavierStokes<dim>::compute_lift_drag()
+	{
+    
+		const double D = 0.1;       		// Cylinder diameter
+		const double rho = 1.0;     		// Density
+		const double H_channel = 0.41; 		// Channel height (needed for 3D scaling)
+		
+		// Force accumulators
+		Tensor<1, dim> total_force;
+		
+		const FEValuesExtractors::Vector velocity(0);
+		const FEValuesExtractors::Scalar pressure(dim);
+
+		FEFaceValues<dim> fe_face_values(*fe, *quadrature_face,
+										update_values | 
+										update_gradients | 
+										update_normal_vectors | 
+										update_JxW_values);
+
+		const unsigned int n_q_face = quadrature_face->size();
+		
+		// Buffers for extracting solution values
+		std::vector<Tensor<2, dim>> velocity_gradients(n_q_face);
+		std::vector<double>         pressure_values(n_q_face);
+
+		for (const auto &cell : dof_handler.active_cell_iterators())
+		{
+			if (!cell->is_locally_owned()) continue;
+
+			// Check boundary faces
+			if (cell->at_boundary())
+			{
+				for (unsigned int face = 0; face < cell->n_faces(); ++face)
+				{
+					// Check boundary id 3 is the cylinder
+					if (cell->face(face)->at_boundary() && cell->face(face)->boundary_id() == 3)
+					{
+						fe_face_values.reinit(cell, face);
+						
+						// Get solution values at quadrature points
+						fe_face_values[velocity].get_function_gradients(solution, velocity_gradients);
+						fe_face_values[pressure].get_function_values(solution, pressure_values);
+
+						for (unsigned int q = 0; q < n_q_face; ++q)
+						{
+							const double p_val = pressure_values[q];
+							const Tensor<2, dim> grad_u = velocity_gradients[q];
+							const Tensor<1, dim> normal = fe_face_values.normal_vector(q);
+
+							// Physical Stress Tensor: sigma = -p*I + rho*nu*(grad_u + grad_u^T) -> (rho = 1.0 is omitted)
+							Tensor<2, dim> stress;
+							for (unsigned int i = 0; i < dim; ++i)
+							{
+								for (unsigned int j = 0; j < dim; ++j)
+								{
+									stress[i][j] = viscosity * (grad_u[i][j] + grad_u[j][i]);
+									if (i == j) stress[i][j] -= p_val;
+								}
+							}
+
+							// Force density = sigma * n
+							Tensor<1, dim> force_density = stress * normal;
+
+							// Integrate: F += force_density * dS
+							for (unsigned int i = 0; i < dim; ++i)
+								total_force[i] += force_density[i] * fe_face_values.JxW(q);
+						}
+					}
+				}
+			}
+		}
+
+		// Sum forces across all MPI processes
+		Tensor<1, dim> global_force;
+		for (unsigned int i = 0; i < dim; ++i)
+			global_force[i] = Utilities::MPI::sum(total_force[i], MPI_COMM_WORLD);
+
+		// Calculate Coefficients [C = 2 * Force / (rho * U_mean^2 * ReferenceArea)]
+		double reference_area = (dim == 2) ? D : (D * H_channel); 
+		double denom = 0.5 * rho * U_mean * U_mean * reference_area;
+		
+		double drag_coeff = global_force[0] / denom; // Force in X
+		double lift_coeff = global_force[1] / denom; // Force in Y
+
+		// Output to screen (Process 0 only)
+		if (mpi_rank == 0)
+		{
+			std::cout << "  Results at t =" << time << ":" << std::endl;
+			std::cout << "    Drag Coefficient (Cd): " << drag_coeff << std::endl;
+			std::cout << "    Lift Coefficient (Cl): " << lift_coeff << std::endl;
+
+			// Append to a file
+			std::ofstream file;
+			std::string filename = "drag_lift_history.txt";
+			file.open(filename, std::ios::app); // Append mode
+			file << std::scientific << std::setprecision(6) 
+				<< time << "\t" << drag_coeff << "\t" << lift_coeff << std::endl;
+			file.close();
+		}
+	}
 
 	/** @brief Function that runs the time simulation loop */
 	template <int dim>
@@ -682,6 +797,8 @@ namespace NavierStokes{
 
 			// Assemble and solve the nonlinear system for this time step
 			newton_iteration(1e-5, 30, is_initial_step, true);
+
+			compute_lift_drag();
 		}
 		
 		pcout << "Time simulation complete." << std::endl;
@@ -689,5 +806,9 @@ namespace NavierStokes{
 	}
 	
 	// Explicit instantiation for dim=3
-	template class NonStationaryNavierStokes<3>;	
+	template class NonStationaryNavierStokes<3>;
+	
+	// Explicit instantation for dim=2
+	template class NonStationaryNavierStokes<2>;
+
 };

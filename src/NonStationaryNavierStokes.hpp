@@ -92,7 +92,7 @@ namespace NavierStokes{
                         time_factor = 1.0;
                     }
                     if(dim == 2){
-                        values[0] = 4 * U_mean * p[1] + (H - p[1]) * time_factor / std::pow(H, 2.);
+                        values[0] = 4 * U_mean * p[1] * (H - p[1]) * time_factor / std::pow(H, 2.);
                     }
                     else if(dim == 3){
                         values[0] = 16 * U_mean * p[1] * p[2] * (H - p[1]) * (H - p[2]) * time_factor / std::pow(H, 4.);
@@ -236,6 +236,8 @@ namespace NavierStokes{
             void set_initial_condition();
 
             void run();
+
+            void compute_lift_drag();
 
             // problem related values setup
             const double viscosity;
