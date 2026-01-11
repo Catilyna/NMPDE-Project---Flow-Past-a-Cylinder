@@ -1,5 +1,6 @@
 #include <iostream>
 #include "StationaryNavierStokes.hpp"
+#include "Timer.hpp"
 
 int main(int argc, char* argv[])
 {
