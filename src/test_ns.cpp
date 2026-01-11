@@ -14,6 +14,7 @@ int main(int argc, char* argv[])
     double viscosity = 1.;
     double theta = 1.; // parameter for the theta method
     double U_mean = 0.45;
+    int dim = 3;
 
     for (int i = 0; i < args.size();++i){
         if (args[i] == "-h" || args[i] == "--help") {
@@ -56,6 +57,15 @@ int main(int argc, char* argv[])
                 return 1;
             }
         }
+        else if(args[i] == "-d") {
+            if(i + 1 < args.size()) {
+                dim = std::stod(args[++i]);
+            }else {
+                std::cout << "-d requires a interger argument..." << std::endl;
+                std::cout << "Exiting..." << std::endl;
+                return 1;
+            }
+        }
     }
 
     std::cout << "Running with:" << std::endl;
@@ -71,10 +81,38 @@ int main(int argc, char* argv[])
     const bool time_dependency = true;
     try
     {
-        NonStationaryNavierStokes<3> flow(mesh_file_name, degree_velocity, degree_pressure, T, delta_t, theta, U_mean, viscosity, time_dependency);
+        if (dim == 2)
         {
+            NonStationaryNavierStokes<2> flow(mesh_file_name, 
+                                              degree_velocity, 
+                                              degree_pressure, 
+                                              T, 
+                                              delta_t,
+                                              theta, 
+                                              U_mean, 
+                                              viscosity, 
+                                              time_dependency);
             ScopedTimer("Navier Stokes Simulation");
             flow.run_time_simulation();
+        }
+        else if (dim == 3)
+        {
+            NonStationaryNavierStokes<3> flow(mesh_file_name, 
+                                              degree_velocity, 
+                                              degree_pressure, 
+                                              T, 
+                                              delta_t, 
+                                              theta, 
+                                              U_mean, 
+                                              viscosity, 
+                                              time_dependency);
+            ScopedTimer("Navier Stokes Simulation");
+            flow.run_time_simulation();
+        }
+        else
+        {
+            std::cerr << "Error: Dimension must be 2 or 3." << std::endl;
+            return 1;
         }
         return 0;
     }
