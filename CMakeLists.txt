@@ -4,6 +4,7 @@ project(NavierStokesProject LANGUAGES CXX C)
 # Set -O3 optimization by default for all build types
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -O3")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -w")
 
 # If using a custom deal.II module, help CMake find it
 # You may need to adjust DEAL_II_DIR to match your module path
@@ -32,6 +33,7 @@ add_executable(NavierStokes
     src/NonStationaryNavierStokes.cpp
     src/preconditioners/BlockSchurPreconditioner.cpp
     src/preconditioners/BlockTriangularPrecondition.cpp
+    src/preconditioners/PressureConvectionDiffusion.cpp
 )
 deal_ii_setup_target(NavierStokes)
 

@@ -56,6 +56,12 @@
 #include <memory>
 
 #include "preconditioners/BlockSchurPreconditioner.hpp"
+#include "./preconditioners/BlockPrecondtioner.h"
+#include "./preconditioners/BlockSchurPreconditioner.hpp"
+#include "./preconditioners/BlockTriangularPrecondition.hpp"
+#include "./preconditioners/PreconditionIdentity.h"
+#include "./preconditioners/PressureConvectionDiffusion.hpp"
+#include "./preconditioners/PreconditionIdentity.h"
 
 using namespace dealii;
 
@@ -292,6 +298,8 @@ namespace NavierStokes{
 
             TrilinosWrappers::BlockSparseMatrix system_matrix;
             TrilinosWrappers::BlockSparseMatrix pressure_mass;
+            TrilinosWrappers::SparseMatrix pressure_laplace_matrix;
+            TrilinosWrappers::SparseMatrix pressure_conv_diff_matrix;
 
             // following Bucelli's convention
             TrilinosWrappers::MPI::BlockVector solution_owned;

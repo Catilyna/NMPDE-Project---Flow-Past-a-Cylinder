@@ -1,13 +1,68 @@
+#include "NonStationaryNavierStokes.hpp"
 #include <fstream>
 #include <iomanip>
-#include "NonStationaryNavierStokes.hpp"
-#include "./preconditioners/BlockPrecondtioner.h"
-#include "./preconditioners/BlockSchurPreconditioner.hpp"
-#include "./preconditioners/BlockTriangularPrecondition.hpp"
-#include "./preconditioners/PreconditionIdentity.h"
-// Helper for .pvd file management
 #include <cstdio>
 #include <sstream>
+#include <vector>
+#include <deal.II/base/tensor.h>
+#include <deal.II/base/quadrature_lib.h>
+#include <deal.II/lac/full_matrix.h>
+#include <deal.II/lac/vector_operation.h>
+#include <deal.II/lac/trilinos_sparse_matrix.h>
+#include <deal.II/lac/trilinos_block_sparse_matrix.h>
+#include <deal.II/lac/trilinos_vector.h>
+#include <deal.II/fe/fe_values.h>
+#include <deal.II/fe/fe_system.h>
+#include <deal.II/dofs/dof_handler.h>
+
+// Forward declaration for the PCD matrix assembly function and block preconditioner
+namespace NavierStokes {
+template <int dim>
+void assemble_pressure_pcd_matrices(
+	const dealii::DoFHandler<dim> &dof_handler,
+	const dealii::FESystem<dim> &fe,
+	const dealii::Quadrature<dim> &quadrature,
+	const dealii::TrilinosWrappers::MPI::BlockVector &velocity_field,
+	dealii::TrilinosWrappers::SparseMatrix &pressure_laplace,
+	dealii::TrilinosWrappers::SparseMatrix &pressure_conv_diff,
+	const double viscosity);
+
+// Block preconditioner wrapper for PCD (applies PCD to pressure block, identity to velocity block)
+class BlockPCDPreconditioner : public dealii::Subscriptor {
+public:
+	BlockPCDPreconditioner(const PressureConvectionDiffusionPCD &pcd) : pcd_(pcd) {}
+	void vmult(dealii::TrilinosWrappers::MPI::BlockVector &dst,
+			   const dealii::TrilinosWrappers::MPI::BlockVector &src) const {
+		// Velocity block: copy src to dst (identity preconditioner)
+		dst.block(0) = src.block(0);
+		// Pressure block: apply PCD preconditioner
+		pcd_.vmult(dst.block(1), src.block(1));
+	}
+
+	// Interface for deal.ii (maybe Trilinos, i don't know) preconditioner usage
+	void initialize(const dealii::TrilinosWrappers::BlockSparseMatrix &system_matrix) {
+		// No initialization needed for this wrapper, it just need to exist
+    }
+private:
+	const PressureConvectionDiffusionPCD &pcd_;
+};
+}
+#include "NonStationaryNavierStokes.hpp"
+#include <fstream>
+#include <iomanip>
+#include <cstdio>
+#include <sstream>
+#include <vector>
+#include <deal.II/base/tensor.h>
+#include <deal.II/base/quadrature_lib.h>
+#include <deal.II/lac/full_matrix.h>
+#include <deal.II/lac/vector_operation.h>
+#include <deal.II/lac/trilinos_sparse_matrix.h>
+#include <deal.II/lac/trilinos_block_sparse_matrix.h>
+#include <deal.II/lac/trilinos_vector.h>
+#include <deal.II/fe/fe_values.h>
+#include <deal.II/fe/fe_system.h>
+#include <deal.II/dofs/dof_handler.h>
 
 
 namespace NavierStokes{
@@ -29,7 +84,7 @@ namespace NavierStokes{
 
 			GridTools::partition_triangulation(mpi_size, mesh_serial);
 			const auto construction_data = TriangulationDescription::Utilities::
-			create_description_from_triangulation(mesh_serial, MPI_COMM_WORLD);
+				create_description_from_triangulation(mesh_serial, MPI_COMM_WORLD);
 			mesh.create_triangulation(construction_data);
 		}
 		// Initialization of the finite element space
@@ -38,16 +93,16 @@ namespace NavierStokes{
 
 		// velocity and pressure will be considered as blocks and not components
 		fe = std::make_unique<FESystem<dim>>(fe_scalar_velocity,
-											 dim,
-											 fe_scalar_pressure,
-											 1);
+											dim,
+											fe_scalar_pressure,
+											1);
 
 		// initialize quadrature. We need this instead of dealII implementation as we 
 		// are using triangulations and gmsh.
 		quadrature = std::make_unique<QGaussSimplex<dim>>(fe->degree + 1);
 		quadrature_face = std::make_unique<QGaussSimplex<dim - 1>>(fe->degree + 1);
 		pcout << "  Quadrature points per cell = " << quadrature->size()
-		<< std::endl;
+			<< std::endl;
 		pcout << "  Quadrature points per face = " << quadrature_face->size() << std::endl;
 
 		// Initialize Inlet velocity class based on the boolean value
@@ -59,7 +114,7 @@ namespace NavierStokes{
 		}
 
 		// SETUP DOFS AND BOUNDARIES
-     	setup_dofs();
+		setup_dofs();
 		setup_boundaries();
 		
 		pcout << "  Initializing the sparsity pattern" << std::endl;
@@ -81,33 +136,78 @@ namespace NavierStokes{
 		sparsity_pattern.compress();
 
 		// We also build a sparsity pattern for the pressure mass matrix.
+		Table<2, DoFTools::Coupling> coupling_pressure_mass(dim + 1, dim + 1);
 		for (unsigned int c = 0; c < dim + 1; ++c)
 		{
 			for (unsigned int d = 0; d < dim + 1; ++d)
 			{
 				if (c == dim && d == dim) // pressure-pressure term
-				coupling[c][d] = DoFTools::always;
+					coupling_pressure_mass[c][d] = DoFTools::always;
 				else // other combinations
-				coupling[c][d] = DoFTools::none;
+					coupling_pressure_mass[c][d] = DoFTools::none;
 			}
 		}
 		TrilinosWrappers::BlockSparsityPattern sparsity_pressure_mass(block_owned_dofs,
-																	 MPI_COMM_WORLD);
+																	MPI_COMM_WORLD);
 		DoFTools::make_sparsity_pattern(dof_handler,
-										coupling,
+										coupling_pressure_mass,
 										sparsity_pressure_mass);
 		sparsity_pressure_mass.compress();
 
-		// code taken from Bucelli's labs
+		// Initialize matrices
 		pcout << "  Initializing the system matrix" << std::endl;
 		system_matrix.reinit(sparsity_pattern);
 		pressure_mass.reinit(sparsity_pressure_mass);
-	
+		
+		// SIMPLEST SOLUTION: Use copy_from to get the same pattern as pressure_mass.block(1,1)
+		pressure_laplace_matrix.copy_from(pressure_mass.block(1,1));
+		pressure_conv_diff_matrix.copy_from(pressure_mass.block(1,1));
+		
+		// Clear the values (keep the pattern)
+		pressure_laplace_matrix = 0;
+		pressure_conv_diff_matrix = 0;
+		
+		// Compress to apply the zero values
+		pressure_laplace_matrix.compress(dealii::VectorOperation::insert);
+		pressure_conv_diff_matrix.compress(dealii::VectorOperation::insert);
+		
+		// Debug information
+		pcout << "  DEBUG: PCD matrix information:" << std::endl;
+		pcout << "    pressure_laplace_matrix size: " 
+			<< pressure_laplace_matrix.m() << "x" << pressure_laplace_matrix.n() << std::endl;
+		pcout << "    pressure_laplace_matrix local range: [" 
+			<< pressure_laplace_matrix.local_range().first << ", "
+			<< pressure_laplace_matrix.local_range().second << ")" << std::endl;
+		pcout << "    Non-zero entries in pattern: " 
+			<< pressure_laplace_matrix.n_nonzero_elements() << std::endl;
+		
+		// Test: Add a simple value to verify the matrix works
+		const auto local_range = pressure_laplace_matrix.local_range();
+		if (local_range.first < local_range.second) {
+			// Add a test value at the first locally owned index
+			const types::global_dof_index test_idx = local_range.first;
+			pressure_laplace_matrix.add(test_idx, test_idx, 1.0);
+			pressure_conv_diff_matrix.add(test_idx, test_idx, viscosity);
+			
+			pressure_laplace_matrix.compress(dealii::VectorOperation::add);
+			pressure_conv_diff_matrix.compress(dealii::VectorOperation::add);
+			
+			pcout << "    Test: Added value at pressure-block index " << test_idx << std::endl;
+			pcout << "    Laplace norm after test: " << pressure_laplace_matrix.frobenius_norm() << std::endl;
+			pcout << "    ConvDiff norm after test: " << pressure_conv_diff_matrix.frobenius_norm() << std::endl;
+			
+			// Clear the test values (they'll be reassembled in set_initial_condition)
+			pressure_laplace_matrix = 0;
+			pressure_conv_diff_matrix = 0;
+			pressure_laplace_matrix.compress(dealii::VectorOperation::insert);
+			pressure_conv_diff_matrix.compress(dealii::VectorOperation::insert);
+		}
+		
 		pcout << "  Initializing the solution vector" << std::endl;
 		present_solution.reinit(block_owned_dofs, MPI_COMM_WORLD);
 		newton_update.reinit(block_owned_dofs, MPI_COMM_WORLD);
 		evaluation_point.reinit(block_owned_dofs, MPI_COMM_WORLD);
-	
+
 		pcout << "  Initializing the system right-hand side" << std::endl;
 		system_rhs.reinit(block_owned_dofs, MPI_COMM_WORLD);
 		
@@ -246,6 +346,8 @@ namespace NavierStokes{
 		FullMatrix<double> local_matrix(dofs_per_cell, dofs_per_cell);
 		Vector<double>     local_rhs(dofs_per_cell);
 		FullMatrix<double> cell_pressure_mass_matrix(dofs_per_cell, dofs_per_cell);
+		FullMatrix<double> cell_pressure_laplace_matrix(dofs_per_cell, dofs_per_cell);
+		FullMatrix<double> cell_pressure_conv_diff_matrix(dofs_per_cell, dofs_per_cell);
 	
 		std::vector<types::global_dof_index> local_dof_indices(dofs_per_cell);
 	
@@ -264,10 +366,17 @@ namespace NavierStokes{
 		std::vector<Tensor<1, dim>> phi_u(dofs_per_cell);       // velocity 
 		std::vector<Tensor<2, dim>> grad_phi_u(dofs_per_cell);  // gradient of velocity
 		std::vector<double> phi_p(dofs_per_cell);               // pressure
+		std::vector<Tensor<1, dim>> grad_phi_p(dofs_per_cell); // gradient of pressure
 		
 
 		for (const auto &cell : dof_handler.active_cell_iterators()) {
 			if(!cell->is_locally_owned()) continue;
+
+			local_matrix = 0;
+			local_rhs = 0;
+			cell_pressure_mass_matrix = 0;
+			cell_pressure_laplace_matrix = 0;
+			cell_pressure_conv_diff_matrix = 0;
 
 			fe_values.reinit(cell);
 	
@@ -285,18 +394,13 @@ namespace NavierStokes{
     		fe_values[velocities].get_function_gradients(old_solution, old_velocity_gradients);
     		fe_values[pressure].get_function_values(old_solution, old_pressure_values);
 	
-			/* DEBUGGING PURPOSES CODE
-			for (const auto& tensor : present_velocity_gradients) {
-			if (std::isinf(tensor.norm())) {
-				pcout << "TROVATO GRADIENTE INFINITO NELLA CELLA: " << cell->active_cell_index() << std::endl;
-				}
-			}*/
 			for (unsigned int q = 0; q < n_q_points; ++q) {
 				   for (unsigned int k = 0; k < dofs_per_cell; ++k) {
 					   div_phi_u[k] = fe_values[velocities].divergence(k, q);
 					   grad_phi_u[k] = fe_values[velocities].gradient(k, q);
 					   phi_u[k] = fe_values[velocities].value(k, q);
 					   phi_p[k] = fe_values[pressure].value(k, q);
+					   grad_phi_p[k] = fe_values[pressure].gradient(k, q);
 				   }
 				   for (unsigned int i = 0; i < dofs_per_cell; ++i) {
 					   if (assemble_matrix) {
@@ -318,34 +422,34 @@ namespace NavierStokes{
 
 								// added this, exactly how Bucelli implemented it. Seems to be needed for preconditioner stability
 								cell_pressure_mass_matrix(i, j) += phi_p[i] * phi_p[j] * fe_values.JxW(q);
+							}	
 						}
+						double present_velocity_divergence = trace(present_velocity_gradients[q]);
+						double old_velocity_divergence = trace(old_velocity_gradients[q]);
+						// time derivative term (1/delta_t) < new_u - old_u, v >
+						local_rhs(i) += (1.0 / delta_t) * scalar_product(phi_u[i], 
+											present_velocity_values[q] - old_velocity_values[q]) * fe_values.JxW(q);
+
+						// Viscous term ((theta)* nu * <grad u_new, grad v> + (1-theta) * nu * <grad u_old, grad v>)
+						local_rhs(i) += viscosity * (
+							theta * scalar_product(grad_phi_u[i], present_velocity_gradients[q])
+							+ (1.0 - theta) * scalar_product(grad_phi_u[i], old_velocity_gradients[q]))
+							* fe_values.JxW(q);
+						
+						// Convective term (theta) [< (grad u_new) u_new , v >] + (1-theta) [< (grad u_old) u_old , v >]
+						local_rhs(i) += (theta) * phi_u[i] * (present_velocity_gradients[q] * present_velocity_values[q])
+							* fe_values.JxW(q);
+						local_rhs(i) += (1.0 - theta) * phi_u[i] * (old_velocity_gradients[q] * old_velocity_values[q])
+							* fe_values.JxW(q);
+						
+						// Pressure terms - (theta) [ < div v, p_new > ] - (1-theta) [< div v, p_old > ]
+						local_rhs(i) -= (theta) * div_phi_u[i] * present_pressure_values[q] * fe_values.JxW(q);
+						local_rhs(i) -= (1.0 - theta) * div_phi_u[i] * old_pressure_values[q] * fe_values.JxW(q);
+
+						// Continuity terms -theta [ < q, div u_new > ] - (1-theta) [ < q, div u_old > ]
+						local_rhs(i) -= (theta) * phi_p[i] * present_velocity_divergence * fe_values.JxW(q);
+						local_rhs(i) -= (1.0 - theta) * phi_p[i] * old_velocity_divergence * fe_values.JxW(q);
 					}
-					double present_velocity_divergence = trace(present_velocity_gradients[q]);
-					double old_velocity_divergence = trace(old_velocity_gradients[q]);
-					// time derivative term (1/delta_t) < new_u - old_u, v >
-					local_rhs(i) += (1.0 / delta_t) * scalar_product(phi_u[i], 
-										present_velocity_values[q] - old_velocity_values[q]) * fe_values.JxW(q);
-
-					// Viscous term ((theta)* nu * <grad u_new, grad v> + (1-theta) * nu * <grad u_old, grad v>)
-					local_rhs(i) += viscosity * (
-						theta * scalar_product(grad_phi_u[i], present_velocity_gradients[q])
-						+ (1.0 - theta) * scalar_product(grad_phi_u[i], old_velocity_gradients[q]))
-						* fe_values.JxW(q);
-					
-					// Convective term (theta) [< (grad u_new) u_new , v >] + (1-theta) [< (grad u_old) u_old , v >]
-					local_rhs(i) += (theta) * phi_u[i] * (present_velocity_gradients[q] * present_velocity_values[q])
-						* fe_values.JxW(q);
-					local_rhs(i) += (1.0 - theta) * phi_u[i] * (old_velocity_gradients[q] * old_velocity_values[q])
-						* fe_values.JxW(q);
-					
-					// Pressure terms - (theta) [ < div v, p_new > ] - (1-theta) [< div v, p_old > ]
-					local_rhs(i) -= (theta) * div_phi_u[i] * present_pressure_values[q] * fe_values.JxW(q);
-					local_rhs(i) -= (1.0 - theta) * div_phi_u[i] * old_pressure_values[q] * fe_values.JxW(q);
-
-					// Continuity terms -theta [ < q, div u_new > ] - (1-theta) [ < q, div u_old > ]
-					local_rhs(i) -= (theta) * phi_p[i] * present_velocity_divergence * fe_values.JxW(q);
-					local_rhs(i) -= (1.0 - theta) * phi_p[i] * old_velocity_divergence * fe_values.JxW(q);
-				}
 			}
 
 			// boundary conditions
@@ -382,7 +486,18 @@ namespace NavierStokes{
 		// I dont know if here we need a check on assemble matrix for system and pressure_mass
 		system_matrix.compress(VectorOperation::add);
 		pressure_mass.compress(VectorOperation::add);
+		if (assemble_matrix) {
+			pressure_laplace_matrix.compress(VectorOperation::add);
+			pressure_conv_diff_matrix.compress(VectorOperation::add);
+		}
 		system_rhs.compress(VectorOperation::add);
+		if (assemble_matrix) {
+			pcout << "Debug: After assemble - Pressure mass norm: " << pressure_mass.frobenius_norm() << std::endl;
+			pcout << "Debug: Pressure laplace norm: " << pressure_laplace_matrix.frobenius_norm() << std::endl;
+			pcout << "Debug: Pressure laplace n_nonzero: " << pressure_laplace_matrix.n_nonzero_elements() << std::endl;
+			pcout << "Debug: Pressure conv_diff norm: " << pressure_conv_diff_matrix.frobenius_norm() << std::endl;
+			pcout << "Debug: Pressure conv_diff n_nonzero: " << pressure_conv_diff_matrix.n_nonzero_elements() << std::endl;
+		}
 	}
 	
 	template <int dim>
@@ -397,30 +512,156 @@ namespace NavierStokes{
 		assemble(initial_step, false);
 	}
 	
-	template <int dim>
+	/*template <int dim>
 	void NonStationaryNavierStokes<dim>::solve(const bool initial_step)
 	{
 		// as before we define contraints bsased on the iteration we're on
 		const AffineConstraints<double> &constraints_used = initial_step ? nonzero_constraints : zero_constraints;
 	
 		// initialize object for solving the system
-		// Increase max iterations for FGMRES to 200000 for robust convergence
-		SolverControl solver_control(200000, 1e-4 * system_rhs.l2_norm(), true);
+		SolverControl solver_control(2000000, 1e-4 * system_rhs.l2_norm(), true);
 		SolverFGMRES<TrilinosWrappers::MPI::BlockVector> gmres(solver_control);
 		
-		// initialize ILU preconditioner with the pressure mass matrix (pressure block)
-		TrilinosWrappers::PreconditionILU pmass_preconditioner;
-		pmass_preconditioner.initialize(pressure_mass.block(1,1), TrilinosWrappers::PreconditionILU::AdditionalData());
+		// Use the assembled member matrices for the PCD preconditioner
+		pcout << "Debug: Pressure mass block(1,1) norm: " << pressure_mass.block(1,1).frobenius_norm() << std::endl;
+		pcout << "Debug: Pressure mass block(1,1) n_nonzero: " << pressure_mass.block(1,1).n_nonzero_elements() << std::endl;
+		pcout << "Debug: Pressure laplace norm: " << pressure_laplace_matrix.frobenius_norm() << std::endl;
+		pcout << "Debug: Pressure laplace n_nonzero: " << pressure_laplace_matrix.n_nonzero_elements() << std::endl;
+		pcout << "Debug: Pressure conv_diff norm: " << pressure_conv_diff_matrix.frobenius_norm() << std::endl;
+		pcout << "Debug: Pressure conv_diff n_nonzero: " << pressure_conv_diff_matrix.n_nonzero_elements() << std::endl;
+		pcout << "Debug: System rhs norm: " << system_rhs.l2_norm() << std::endl;
 
-		// initialize BlockSchurPreconditioner passing the previously computed pmass preconditioner
-		const BlockSchurPreconditioner<TrilinosWrappers::PreconditionILU> preconditioner(gamma, viscosity, system_matrix, pressure_mass, pmass_preconditioner);
-
-		// solve using the Schur Preconditioner
-		gmres.solve(system_matrix, newton_update, system_rhs, preconditioner);
+		// Initialise PCD preconditioner
+		PressureConvectionDiffusionPCD pcd;
+		pcd.initialize(pressure_mass.block(1,1), pressure_laplace_matrix, pressure_conv_diff_matrix);
+		// Create block preconditioner
+		NavierStokes::BlockPCDPreconditioner block_pcd_preconditioner(pcd);
+		// Use the block preconditioner in the solve
+		pcout << "DEBUG: Solving with FGMRES + PCD preconditioner..." << std::endl;
+		gmres.solve(system_matrix, newton_update, system_rhs, block_pcd_preconditioner);
 		pcout << "FGMRES steps: " << solver_control.last_step() << std::endl;
 		constraints_used.distribute(newton_update);
-
 		solution = newton_update; // update owned and ghost dofs
+	}*/
+	template <int dim>
+	void NonStationaryNavierStokes<dim>::solve(const bool initial_step)
+	{
+		const AffineConstraints<double> &constraints_used = initial_step ? nonzero_constraints : zero_constraints;
+		
+		pcout << "DEBUG: Solving system..." << std::endl;
+		pcout << "  System matrix size: " << system_matrix.m() << "x" << system_matrix.n() << std::endl;
+		pcout << "  System matrix norm: " << system_matrix.frobenius_norm() << std::endl;
+		pcout << "  RHS norm: " << system_rhs.l2_norm() << std::endl;
+		
+		// TEST 1: Try simple preconditioner first
+		pcout << "TEST 1: Trying with identity preconditioner..." << std::endl;
+		{
+			SolverControl test_control(10000, 1e-6, true);
+			SolverFGMRES<TrilinosWrappers::MPI::BlockVector> test_gmres(test_control);
+			dealii::PreconditionIdentity identity;
+			
+			TrilinosWrappers::MPI::BlockVector test_solution;
+			test_solution.reinit(system_rhs);
+			
+			try {
+				test_gmres.solve(system_matrix, test_solution, system_rhs, identity);
+				pcout << "  Identity preconditioner: converged in " << test_control.last_step() 
+					<< " iterations, residual " << test_control.last_value() << std::endl;
+				
+				// Check if solution makes sense
+				pcout << "  Solution norm: " << test_solution.l2_norm() << std::endl;
+				
+				// Use this solution
+				newton_update = test_solution;
+				constraints_used.distribute(newton_update);
+				return;
+			} catch (std::exception &e) {
+				pcout << "  Identity preconditioner failed: " << e.what() << std::endl;
+				pcout << "  Last residual: " << test_control.last_value() << std::endl;
+			}
+		}
+		
+		// TEST 2: Try block diagonal preconditioner (simple)
+		pcout << "TEST 2: Trying block diagonal preconditioner..." << std::endl;
+		{
+			// Simple block diagonal: identity for velocity, pressure mass for pressure
+			SolverControl test_control(2000, 1e-8 * system_rhs.l2_norm(), true);
+			SolverFGMRES<TrilinosWrappers::MPI::BlockVector> test_gmres(test_control);
+			
+			class SimpleBlockDiagonal : public dealii::Subscriptor {
+			public:
+				SimpleBlockDiagonal(const dealii::TrilinosWrappers::SparseMatrix &pressure_mass)
+					: pressure_mass_(pressure_mass) {}
+				
+				void vmult(dealii::TrilinosWrappers::MPI::BlockVector &dst,
+						const dealii::TrilinosWrappers::MPI::BlockVector &src) const {
+					// Velocity block: identity
+					dst.block(0) = src.block(0);
+					
+					// Pressure block: solve pressure mass system
+					dealii::SolverControl control(100, 1e-12);
+					dealii::SolverCG<dealii::TrilinosWrappers::MPI::Vector> solver(control);
+					dealii::TrilinosWrappers::PreconditionILU preconditioner;
+					dealii::TrilinosWrappers::PreconditionILU::AdditionalData data;
+					data.ilu_fill = 0.5;
+					preconditioner.initialize(pressure_mass_, data);
+					
+					solver.solve(pressure_mass_, dst.block(1), src.block(1), preconditioner);
+				}
+				
+			private:
+				const dealii::TrilinosWrappers::SparseMatrix &pressure_mass_;
+			};
+			
+			SimpleBlockDiagonal simple_prec(pressure_mass.block(1,1));
+			
+			try {
+				test_gmres.solve(system_matrix, newton_update, system_rhs, simple_prec);
+				pcout << "  Block diagonal: converged in " << test_control.last_step() 
+					<< " iterations, residual " << test_control.last_value() << std::endl;
+				constraints_used.distribute(newton_update);
+				return;
+			} catch (std::exception &e) {
+				pcout << "  Block diagonal failed: " << e.what() << std::endl;
+			}
+		}
+		
+		// TEST 3: Direct solver as last resort
+		pcout << "TEST 3: Trying direct solver..." << std::endl;
+		try {
+			// Convert to non-block format for direct solver
+			dealii::TrilinosWrappers::SparseMatrix system_matrix_full;
+			dealii::TrilinosWrappers::MPI::Vector rhs_full, solution_full;
+			
+			// Extract full matrix from block matrix
+			// This is a bit complex - let's try a different approach
+			
+			// Instead, use the existing PCD but with debugging
+			pcout << "DEBUG: Testing PCD preconditioner step by step..." << std::endl;
+			
+			// Test PCD on a simple vector
+			dealii::TrilinosWrappers::MPI::Vector test_vec, result_vec;
+			test_vec.reinit(pressure_mass.block(1,1).locally_owned_domain_indices(), MPI_COMM_WORLD);
+			test_vec = 1.0;  // Constant vector
+			result_vec.reinit(test_vec);
+			
+			PressureConvectionDiffusionPCD pcd_preconditioner;
+			pcd_preconditioner.initialize(pressure_mass.block(1,1), 
+										pressure_laplace_matrix, 
+										pressure_conv_diff_matrix);
+			
+			pcd_preconditioner.vmult(result_vec, test_vec);
+			pcout << "  PCD test: input norm = " << test_vec.l2_norm() 
+				<< ", output norm = " << result_vec.l2_norm() << std::endl;
+			
+		} catch (std::exception &e) {
+			pcout << "ERROR: " << e.what() << std::endl;
+		}
+		
+		// If all else fails, use zero update
+		pcout << "WARNING: Using zero update" << std::endl;
+		newton_update = 0.0;
+		constraints_used.distribute(newton_update);
 	}
 	
 	/** @brief Function identifies area where the error is larger and refines the mesh
@@ -632,6 +873,17 @@ namespace NavierStokes{
 		
 		// Boundary conditions will be enforced during assembly
 		// through the constraints system
+
+		// Assemble the matrices for PCD (use present_solution as velocity field for now)
+		NavierStokes::assemble_pressure_pcd_matrices<dim>(
+			dof_handler,
+			dynamic_cast<const FESystem<dim>&>(*fe),
+			*quadrature,
+			present_solution,
+			pressure_laplace_matrix,
+			pressure_conv_diff_matrix,
+			viscosity
+		);
 		
 		pcout << "  Zero initial condition set." << std::endl;
 	}
@@ -679,6 +931,186 @@ namespace NavierStokes{
 		pcout << "===============================================" << std::endl;
 	}
 	
-	// Explicit instantiation for dim=3
+	// Explicit instantiation for dim=2
 	template class NonStationaryNavierStokes<2>;	
 };
+
+/**  @brief pressure Laplacian and convection-diffusion matrices for PCD preconditioner */
+
+namespace NavierStokes {
+
+template <int dim>
+void assemble_pressure_pcd_matrices(
+    const dealii::DoFHandler<dim> &dof_handler,
+    const dealii::FESystem<dim> &fe,
+    const dealii::Quadrature<dim> &quadrature,
+    const dealii::TrilinosWrappers::MPI::BlockVector &velocity_field,
+    dealii::TrilinosWrappers::SparseMatrix &pressure_laplace,
+    dealii::TrilinosWrappers::SparseMatrix &pressure_conv_diff,
+    const double viscosity)
+{
+    // Mark velocity_field as unused to avoid warning
+    (void)velocity_field;
+    
+    std::cout << "DEBUG: Assembling PCD matrices" << std::endl;
+    
+    // Get the matrix's local range (in pressure-block indices, 0..n_p-1)
+    const auto matrix_range = pressure_laplace.local_range();
+    std::cout << "  Pressure matrix range (pressure-block indices): [" 
+              << matrix_range.first << ", " << matrix_range.second << ")" << std::endl;
+    
+    // Clear matrices
+    pressure_laplace = 0;
+    pressure_conv_diff = 0;
+    
+    // First, understand the DoF numbering
+    std::vector<unsigned int> block_component(dim + 1, 0);
+    block_component[dim] = 1;  // pressure in block 1
+    std::vector<types::global_dof_index> dofs_per_block = 
+        DoFTools::count_dofs_per_fe_block(dof_handler, block_component);
+    
+    const unsigned int n_u = dofs_per_block[0];  // velocity DoFs
+    const unsigned int n_p = dofs_per_block[1];  // pressure DoFs
+    
+    std::cout << "  Total DoFs: velocity = " << n_u << ", pressure = " << n_p << std::endl;
+    
+    // Now assemble
+    dealii::FEValues<dim> fe_values(fe, quadrature, 
+        dealii::update_gradients | dealii::update_JxW_values);
+    
+    const unsigned int dofs_per_cell = fe.n_dofs_per_cell();
+    const unsigned int n_q_points = quadrature.size();
+    
+    std::vector<dealii::types::global_dof_index> local_dof_indices(dofs_per_cell);
+    
+    unsigned int cells_processed = 0;
+    unsigned int entries_added = 0;
+    double total_laplace_value = 0.0;
+    
+    for (const auto &cell : dof_handler.active_cell_iterators()) {
+        if (!cell->is_locally_owned()) continue;
+        
+        cells_processed++;
+        fe_values.reinit(cell);
+        cell->get_dof_indices(local_dof_indices);
+        
+        // Find pressure DoFs in this cell and convert to pressure-block indices
+        std::vector<types::global_dof_index> pressure_block_dofs; // 0..n_p-1
+        std::vector<unsigned int> local_indices;
+        
+        for (unsigned int i = 0; i < dofs_per_cell; ++i) {
+            if (fe.system_to_component_index(i).first == dim) { // pressure
+                const types::global_dof_index global_dof = local_dof_indices[i];
+                
+                // Convert global DoF index to pressure-block index (0..n_p-1)
+                if (global_dof >= n_u) {
+                    const types::global_dof_index block_dof = global_dof - n_u;
+                    
+                    // Check if this is a valid pressure-block index
+                    if (block_dof < n_p) {
+                        pressure_block_dofs.push_back(block_dof);
+                        local_indices.push_back(i);
+                    }
+                }
+            }
+        }
+        
+        if (pressure_block_dofs.empty()) continue;
+        
+        // Create local matrix for this cell's pressure DoFs
+        const unsigned int n_local_pressure = pressure_block_dofs.size();
+        dealii::FullMatrix<double> local_laplace(n_local_pressure, n_local_pressure);
+        dealii::FullMatrix<double> local_conv_diff(n_local_pressure, n_local_pressure);
+        local_laplace = 0.0;
+        local_conv_diff = 0.0;
+        
+        // Assemble local contributions
+        for (unsigned int q = 0; q < n_q_points; ++q) {
+            const double JxW = fe_values.JxW(q);
+            
+            for (unsigned int i_loc = 0; i_loc < n_local_pressure; ++i_loc) {
+                const unsigned int i = local_indices[i_loc];
+                const dealii::Tensor<1, dim> grad_phi_i = fe_values.shape_grad_component(i, q, dim);
+                
+                for (unsigned int j_loc = 0; j_loc < n_local_pressure; ++j_loc) {
+                    const unsigned int j = local_indices[j_loc];
+                    const dealii::Tensor<1, dim> grad_phi_j = fe_values.shape_grad_component(j, q, dim);
+                    
+                    const double laplace_val = grad_phi_i * grad_phi_j * JxW;
+                    local_laplace(i_loc, j_loc) += laplace_val;
+                    local_conv_diff(i_loc, j_loc) += viscosity * grad_phi_i * grad_phi_j * JxW;
+                    
+                    total_laplace_value += std::abs(laplace_val);
+                }
+            }
+        }
+        
+        // Add to global matrices using PRESSURE-BLOCK INDICES (0..n_p-1)
+        for (unsigned int i_loc = 0; i_loc < n_local_pressure; ++i_loc) {
+            const types::global_dof_index block_row = pressure_block_dofs[i_loc];
+            
+            // Check if this pressure-block row is locally owned
+            if (block_row >= matrix_range.first && block_row < matrix_range.second) {
+                
+                for (unsigned int j_loc = 0; j_loc < n_local_pressure; ++j_loc) {
+                    const types::global_dof_index block_col = pressure_block_dofs[j_loc];
+                    
+                    const double laplace_val = local_laplace(i_loc, j_loc);
+                    const double conv_diff_val = local_conv_diff(i_loc, j_loc);
+                    
+                    if (std::abs(laplace_val) > 1e-15) {
+                        // Use PRESSURE-BLOCK indices
+                        pressure_laplace.add(block_row, block_col, laplace_val);
+                        pressure_conv_diff.add(block_row, block_col, conv_diff_val);
+                        entries_added++;
+                    }
+                }
+            }
+        }
+        
+        // Debug first few cells
+        if (cells_processed <= 3) {
+            std::cout << "  Cell " << cells_processed << ":" << std::endl;
+            std::cout << "    Global DoFs: ";
+            for (unsigned int i = 0; i < dofs_per_cell; ++i) {
+                std::cout << local_dof_indices[i] << " ";
+            }
+            std::cout << std::endl;
+            std::cout << "    Pressure-block DoFs: ";
+            for (const auto &dof : pressure_block_dofs) std::cout << dof << " ";
+            std::cout << std::endl;
+        }
+    }
+    
+    // Compress matrices
+    pressure_laplace.compress(dealii::VectorOperation::add);
+    pressure_conv_diff.compress(dealii::VectorOperation::add);
+    
+    std::cout << "DEBUG: Assembly complete" << std::endl;
+    std::cout << "  Cells processed: " << cells_processed << std::endl;
+    std::cout << "  Total laplace value computed: " << total_laplace_value << std::endl;
+    std::cout << "  Entries added: " << entries_added << std::endl;
+    std::cout << "  Laplace norm: " << pressure_laplace.frobenius_norm() << std::endl;
+    std::cout << "  ConvDiff norm: " << pressure_conv_diff.frobenius_norm() << std::endl;
+    
+    // If still zero, something is wrong
+    if (pressure_laplace.frobenius_norm() < 1e-10 && entries_added > 0) {
+        std::cout << "ERROR: Added " << entries_added << " entries but norm is zero!" << std::endl;
+        std::cout << "  Testing direct set()..." << std::endl;
+        
+        for (types::global_dof_index i = matrix_range.first; 
+             i < std::min(matrix_range.first + 3, matrix_range.second); ++i) {
+            pressure_laplace.set(i, i, 1.0);
+            pressure_conv_diff.set(i, i, viscosity);
+            std::cout << "    Set at pressure-block index " << i << std::endl;
+        }
+        
+        pressure_laplace.compress(dealii::VectorOperation::insert);
+        pressure_conv_diff.compress(dealii::VectorOperation::insert);
+        
+        std::cout << "  After set(): laplace norm = " << pressure_laplace.frobenius_norm() 
+                  << ", conv_diff norm = " << pressure_conv_diff.frobenius_norm() << std::endl;
+    }
+}
+
+} // namespace NavierStokes
