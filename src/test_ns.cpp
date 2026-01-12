@@ -78,7 +78,7 @@ int main(int argc, char* argv[])
     const unsigned int degree_pressure = 1;
     const double T = 5.;              
     const double delta_t = 0.02;       // time step size
-    const bool time_dependency = true;
+    const bool time_dependency = false;
     try
     {
         if (dim == 2)
