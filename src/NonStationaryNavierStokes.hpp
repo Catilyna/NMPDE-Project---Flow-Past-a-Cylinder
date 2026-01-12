@@ -123,7 +123,7 @@ namespace NavierStokes{
                     if (component == 0)
                     {
                         if(dim == 2){
-                            return 4 * U_mean * p[1] + (H - p[1]) * time_factor / std::pow(H, 2.);
+                            return 4 * U_mean * p[1] * (H - p[1]) * time_factor / std::pow(H, 2.);
                         }
                         else if(dim == 3){
                             return 16 * U_mean * p[1] * p[2] * (H - p[1]) * (H - p[2]) * time_factor / std::pow(H, 4.);
@@ -156,11 +156,10 @@ namespace NavierStokes{
                     double time_factor{ std::sin((M_PI / 8.0) * (current_time)) };
                    
                     if(dim == 2){
-                        values[0] = 4 * U_mean * p[1] + (H - p[1]) * time_factor / std::pow(H, 2.);
+                        values[0] = 4 * U_mean * p[1] * (H - p[1]) * time_factor / std::pow(H, 2.);
                     } else if(dim == 3){
                         values[0] = 16 * U_mean * p[1] * p[2] * (H - p[1]) * (H - p[2]) * time_factor / std::pow(H, 4.);
                     }
-
                     for (unsigned int i = 1; i < dim + 1; ++i)
                         values[i] = 0.0;
                 }

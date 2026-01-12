@@ -22,7 +22,7 @@ namespace NavierStokes {
     PreconditionBlockTriangular::vmult(TrilinosWrappers::MPI::BlockVector       &dst,
                                        const TrilinosWrappers::MPI::BlockVector &src) const
     {
-        SolverControl solver_control_velocity(1000, 1e-2 * src.block(0).l2_norm());
+        SolverControl solver_control_velocity(10000, 1e-2 * src.block(0).l2_norm());
         
         SolverCG<TrilinosWrappers::MPI::Vector> solver_cg_velocity(solver_control_velocity);
         
@@ -37,7 +37,7 @@ namespace NavierStokes {
         
         tmp.sadd(-1.0, src.block(1));
 
-        SolverControl solver_control_pressure(1000, 1e-2 * src.block(1).l2_norm());
+        SolverControl solver_control_pressure(10000, 1e-2 * src.block(1).l2_norm());
         
         SolverCG<TrilinosWrappers::MPI::Vector> solver_cg_pressure(solver_control_pressure);
         
