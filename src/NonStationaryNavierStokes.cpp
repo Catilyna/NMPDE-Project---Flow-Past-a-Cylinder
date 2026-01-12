@@ -406,7 +406,8 @@ namespace NavierStokes{
 		// initialize object for solving the system
 		SolverControl solver_control(system_matrix.m(), 1e-4 * system_rhs.l2_norm(), true);
 		SolverFGMRES<TrilinosWrappers::MPI::BlockVector> gmres(solver_control);
-		
+
+		solver_control.set_tolerance(1e-6);
 		
 		// initialize ILU preconditioner with the pressure mass matrix we derived in the assemble() function
 		TrilinosWrappers::PreconditionILU pmass_preconditioner;
@@ -417,8 +418,7 @@ namespace NavierStokes{
 		// initialize BlockShurPreconditioner passing the previously computed pmass precondtioner;
 		const BlockSchurPreconditioner<TrilinosWrappers::PreconditionILU> preconditioner(gamma, viscosity, system_matrix, pressure_mass, pmass_preconditioner);
 		
-		/*
-		// PreconditionBlockTriangular preconditioner;
+		/*PreconditionBlockTriangular preconditioner;
   		preconditioner.initialize(system_matrix.block(0, 0),
                             		pressure_mass.block(1, 1),
                             		system_matrix.block(1, 0));
@@ -735,6 +735,8 @@ namespace NavierStokes{
 		Tensor<1, dim> global_force;
 		for (unsigned int i = 0; i < dim; ++i)
 			global_force[i] = Utilities::MPI::sum(total_force[i], MPI_COMM_WORLD);
+
+		global_force *= -1.0;
 
 		// Calculate Coefficients [C = 2 * Force / (rho * U_mean^2 * ReferenceArea)]
 		double reference_area = (dim == 2) ? D : (D * H_channel); 
