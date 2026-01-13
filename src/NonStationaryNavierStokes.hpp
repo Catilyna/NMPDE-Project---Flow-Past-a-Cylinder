@@ -86,7 +86,7 @@ namespace NavierStokes{
                     double time_factor = 0.0;
                     if (current_time < ramp_duration)
                     {
-                        time_factor = std::sin((M_PI / 8.0) * (current_time / ramp_duration));
+                        time_factor = std::sin((M_PI / 2.0) * (current_time / ramp_duration));
                     }
                     else
                     {
@@ -108,7 +108,7 @@ namespace NavierStokes{
                 {
                     // 1. Copy the time logic exactly as it is in vector_value
                     double current_time = this->get_time();
-                    double ramp_duration = 0.5;
+                    double ramp_duration = 0.25;
 
                     double time_factor = 0.0;
                     if (current_time < ramp_duration)
