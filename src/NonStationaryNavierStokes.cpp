@@ -404,7 +404,7 @@ namespace NavierStokes{
 		const AffineConstraints<double> &constraints_used = initial_step ? nonzero_constraints : zero_constraints;
 	
 		// initialize object for solving the system
-		SolverControl solver_control(system_matrix.m(), 1e-4 * system_rhs.l2_norm(), true);
+		SolverControl solver_control(system_matrix.m()*1000, 1e-4 * system_rhs.l2_norm(), true);
 		SolverFGMRES<TrilinosWrappers::MPI::BlockVector> gmres(solver_control);
 
 		solver_control.set_tolerance(1e-6);
