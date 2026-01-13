@@ -21,11 +21,29 @@ namespace NavierStokes {
         TrilinosWrappers::MPI::Vector utmp;
         utmp.reinit(src.block(0));
         {
-            SolverControl solver_control(1000, 1e-6 * src.block(1).l2_norm());
-            SolverCG<TrilinosWrappers::MPI::Vector> cg(solver_control);
+            const double target_tolerance = std::max(1e-2 * src.block(1).l2_norm(), 1e-20);
+
+            // 2. Set SolverControl.
+            // We allow fewer iterations (1000 is usually plenty for an inner solve).
+            SolverControl solver_control(1000, target_tolerance);
+
+            SolverFGMRES<TrilinosWrappers::MPI::Vector> cg(solver_control);
+
+            dst.block(1) = 0.0;
+            try {
+                cg.solve(pressure_mass.block(1, 1), dst.block(1), src.block(1), mp_preconditioner);
+            } catch (std::exception &e) {
+
+                std::cerr << "Inner preconditioner warning: " << e.what() << std::endl;
+            }
+
+            dst.block(1) *= -(viscosity + gamma);
+            /*
+            SolverControl solver_control(10000, 1e-6 * src.block(1).l2_norm());
+            SolverFGMRES<TrilinosWrappers::MPI::BlockVector> cg(solver_control);
             dst.block(1) = 0.0;
             cg.solve(pressure_mass.block(1, 1), dst.block(1), src.block(1), mp_preconditioner);
-            dst.block(1) *= -(viscosity + gamma);
+            dst.block(1) *= -(viscosity + gamma);*/
         }
         {
             system_matrix.block(0, 1).vmult(utmp, dst.block(1));

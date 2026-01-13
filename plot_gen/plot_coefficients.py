@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 # We use sep='\s+' to handle spaces or tabs as separators
 # header=None tells pandas there is no first row with names
 filename = "../results/drag_lift_history.txt"
-data = pd.read_csv(filename, sep='\s+', header=None, names=["Time", "Drag", "Lift"])
+data = pd.read_csv(filename, sep=r'\s+', header=None, names=["Time", "Drag", "Lift"])
 
 # 2. Create the plot
 plt.figure(figsize=(12, 5)) # Width, Height in inches
@@ -31,4 +31,3 @@ plt.legend()
 # 3. Show/Save
 plt.tight_layout()
 plt.savefig("../results/coefficients_plot.png", dpi=300) # Save high-quality image
-plt.show()
