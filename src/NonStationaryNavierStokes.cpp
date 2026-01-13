@@ -405,8 +405,12 @@ namespace NavierStokes{
 		SolverFGMRES<TrilinosWrappers::MPI::BlockVector>::AdditionalData data;
 		data.max_basis_size = 100; // increase from the default so that GMRES doesnt forget easily
 		// initialize object for solving the system
+
 		SolverControl solver_control(system_matrix.m(), 1e-4 * system_rhs.l2_norm(), true);
 		SolverFGMRES<TrilinosWrappers::MPI::BlockVector> gmres(solver_control, data);
+
+		solver_control.set_tolerance(1e-6);
+
 		
 		// initialize ILU preconditioner with the pressure mass matrix we derived in the assemble() function
 		TrilinosWrappers::PreconditionILU pmass_preconditioner;
