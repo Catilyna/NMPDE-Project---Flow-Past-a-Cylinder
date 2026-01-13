@@ -739,11 +739,13 @@ namespace NavierStokes{
 		for (unsigned int i = 0; i < dim; ++i)
 			global_force[i] = Utilities::MPI::sum(total_force[i], MPI_COMM_WORLD);
 
+		// boundary normal vectors point out of the fluid	
 		global_force *= -1.0;
 
 		// Calculate Coefficients [C = 2 * Force / (rho * U_mean^2 * ReferenceArea)]
 		double reference_area = (dim == 2) ? D : (D * H_channel); 
-		double denom = 0.5 * rho * U_mean * U_mean * reference_area;
+		double reference_velocity = (dim == 2) ? ((2.0 / 3.0) * U_mean) : (((4.0 / 9.0)) * U_mean); 
+		double denom = reference_velocity * reference_velocity * reference_area;
 		
 		double drag_coeff = global_force[0] / denom; // Force in X
 		double lift_coeff = global_force[1] / denom; // Force in Y
