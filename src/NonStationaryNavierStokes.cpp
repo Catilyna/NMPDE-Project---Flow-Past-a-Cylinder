@@ -1,11 +1,7 @@
+#include "NonStationaryNavierStokes.hpp"
+
 #include <fstream>
 #include <iomanip>
-#include "NonStationaryNavierStokes.hpp"
-#include "./preconditioners/BlockPrecondtioner.h"
-#include "./preconditioners/BlockSchurPreconditioner.hpp"
-#include "./preconditioners/BlockTriangularPrecondition.hpp"
-#include "./preconditioners/PreconditionIdentity.h"
-// Helper for .pvd file management
 #include <cstdio>
 #include <sstream>
 
@@ -219,7 +215,10 @@ namespace NavierStokes{
 	}
 
 	
-	/** @brief Assembles the whole system. (too lazy) */
+	/** @brief Assembles the whole system.
+	 * initial_step: determines constraints used at the end of the method
+	 * assemble_system: boolean that determines wheter to compute system matrix or not
+	*/
 	template <int dim>
 	void NonStationaryNavierStokes<dim>::assemble(const bool initial_step, const bool assemble_matrix)
 	{
@@ -403,14 +402,11 @@ namespace NavierStokes{
 		// as before we define contraints bsased on the iteration we're on
 		const AffineConstraints<double> &constraints_used = initial_step ? nonzero_constraints : zero_constraints;
 		SolverFGMRES<TrilinosWrappers::MPI::BlockVector>::AdditionalData data;
-		data.max_basis_size = 100; // increase from the default so that GMRES doesnt forget easily
+		data.max_basis_size = 200; // increase from the default so that GMRES doesnt forget easily
 		// initialize object for solving the system
 
 		SolverControl solver_control(system_matrix.m(), 1e-4 * system_rhs.l2_norm(), true);
 		SolverFGMRES<TrilinosWrappers::MPI::BlockVector> gmres(solver_control, data);
-
-		solver_control.set_tolerance(1e-6);
-
 		
 		// initialize ILU preconditioner with the pressure mass matrix we derived in the assemble() function
 		TrilinosWrappers::PreconditionILU pmass_preconditioner;
@@ -434,50 +430,6 @@ namespace NavierStokes{
 
 		solution = newton_update; // update owned and ghost dofs
 	}
-	
-	/** @brief Function identifies area where the error is larger and refines the mesh
-	 *  in order to create new cells there
-	 
-	template <int dim>
-	void NonStationaryNavierStokes<dim>::refine_mesh()
-	{
-		// error estimation
-		Vector<float> estimated_error_per_cell(mesh.n_active_cells());
-		const FEValuesExtractors::Vector velocity(0);
-		KellyErrorEstimator<dim>::estimate(dof_handler, 
-										QGauss<dim - 1>(degree_velocity + degree_pressure + 1), 
-										std::map<types::boundary_id, 
-										const Function<dim> *>(), 
-										present_solution, 
-										estimated_error_per_cell, 
-										fe->component_mask(velocity));
-	
-		// here it takes the 0.3 (30%) of the cells with the highest error from the mesh for refinement
-		GridRefinement::refine_and_coarsen_fixed_number(mesh, estimated_error_per_cell, 0.3, 0.0);
-		mesh.prepare_coarsening_and_refinement();
-	
-		// creating new points means it is necessary to add more dof.
-		// This also means we need to store somewhere the solutiuon computed so far
-		parallel::distributed::SolutionTransfer<dim, TrilinosWrappers::MPI::BlockVector> solution_transfer(dof_handler);
-		solution_transfer.prepare_for_coarsening_and_refinement(present_solution);
-		mesh.execute_coarsening_and_refinement();
-	
-		// redefines dof
-		setup_dofs();
-		// resize matrices and present solution
-		initialize_system();
-	
-		// interpolating on the new mesh
-		TrilinosWrappers::MPI::BlockVector tmp_solution;
-		tmp_solution.reinit(present_solution,
-							MPI_COMM_WORLD);
-
-		solution_transfer.interpolate(tmp_solution);
-		nonzero_constraints.distribute(tmp_solution);
-		
-		present_solution = tmp_solution;
-	}
-	*/
 
 	/** @brief We use the Newton method in order to solve a nonlinear system like
 	 * 	this one 
@@ -547,24 +499,6 @@ namespace NavierStokes{
 			   // process_solution(); no need for now of this function call
 		   }
 	}
-	
-	/** @brief Function that computes the initial guess when the Reynolds number is over 1000
-	 * I guess we will not need this as in the paper it is written we are just working with
-	 * Reynolds number smaller than 200.
-	 */
-	template <int dim>
-	void NonStationaryNavierStokes<dim>::compute_initial_guess(double step_size)
-	{
-		const double target_Re = 1.0 / viscosity;
-		bool is_initial_step = true;
-		for (double Re = 1000.0; Re < target_Re; Re = std::min(Re + step_size, target_Re)) {
-			// viscosity = 1.0 / Re;
-			pcout << "Searching for initial guess with Re = " << Re << std::endl;
-			newton_iteration(1e-12, 50, is_initial_step, false);
-			is_initial_step = false;
-		}
-	}
-	
 	
 	/** @brief Function that just prints the output (pretty similar to Bucelli's) 
 	*/

@@ -36,17 +36,25 @@ private:
 
     // This matrix is CONSTANT in time.
     TrilinosWrappers::BlockSparseMatrix step2_matrix;
+
+    TrilinosWrappers::BlockSparseMatrix step3_matrix;
     
     // RHS for Step 2.
     TrilinosWrappers::MPI::BlockVector step2_rhs;
 
+    TrilinosWrappers::MPI::BlockVector step3_rhs;
+
     void setup_fractional_step_system();
 
-    void assemble_step1_system();
+    void assemble_step1_system(const bool initial_step, const bool assemble_matrix);
     
-    void assemble_step2_rhs();
+    void assemble_step2_system(const bool initial_step, const bool assemble_matrix);
+
+    void assemble_step3_system(const bool initial_step, const bool assemble_matrix);
 
     void solve_step1();
     
     void solve_step2();
+
+    void solve_step3();
 };

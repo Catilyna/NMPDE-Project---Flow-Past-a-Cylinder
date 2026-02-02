@@ -50,13 +50,16 @@
 
 #include <deal.II/distributed/fully_distributed_tria.h>
 #include <deal.II/distributed/solution_transfer.h>
+
+#include "./preconditioners/BlockPrecondtioner.h"
+#include "./preconditioners/BlockSchurPreconditioner.hpp"
+#include "./preconditioners/BlockTriangularPrecondition.hpp"
+#include "./preconditioners/PreconditionIdentity.h"
 #include <fstream>
 #include <iostream>
 #include <vector>
 #include <cmath>
 #include <memory>
-
-#include "preconditioners/BlockSchurPreconditioner.hpp"
 
 using namespace dealii;
 
@@ -207,7 +210,7 @@ namespace NavierStokes{
 
             void run_time_simulation();
 
-        private:
+        protected:
             void setup_dofs();
 
             void setup_boundaries();
@@ -296,20 +299,19 @@ namespace NavierStokes{
             TrilinosWrappers::MPI::BlockVector system_rhs;
 
             // Useful vectors used in Newton update
-            TrilinosWrappers::MPI::BlockVector present_solution;
             TrilinosWrappers::MPI::BlockVector newton_update;
             TrilinosWrappers::MPI::BlockVector evaluation_point;
-
+            
             // time stepping values
             const double T;               // final time
             const double delta_t;         // time step size
             double time = 0.0;            // current time
             unsigned int timestep_number; // current time step number
-
+            
             const double theta; // parameter for the theta-method
-
+            
             // old and current solution storage (for time stepping)
             TrilinosWrappers::MPI::BlockVector old_solution;
-            TrilinosWrappers::MPI::BlockVector current_solution;
+            TrilinosWrappers::MPI::BlockVector present_solution;
     };
 }; // namespace NavierStokes

@@ -36,4 +36,4 @@ physics:
       value: 0.0 # Not specified
 
   time:
-    interval: [0, 5.0] # time interval of consideration
+    interval: [0, 8.0] # time interval of consideration
