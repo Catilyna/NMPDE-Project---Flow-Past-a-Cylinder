@@ -110,6 +110,7 @@ namespace NavierStokes{
 		pcout << "  Initializing the solution vector" << std::endl;
 		solution_owned.reinit(block_owned_dofs, MPI_COMM_WORLD);
 		solution.reinit(block_owned_dofs, block_relevant_dofs, MPI_COMM_WORLD);
+		old_solution.reinit(block_owned_dofs, block_relevant_dofs, MPI_COMM_WORLD);
 	}
 
 	/** @brief Function that setups the Dof handler for the Stationary Navier Stokes solver. 

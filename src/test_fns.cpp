@@ -1,4 +1,4 @@
-#include "NonStationaryNavierStokes.hpp"
+#include "NavierStokesFractional.hpp"
 #include "Timer.hpp"
 #include <iostream>
 
@@ -83,7 +83,7 @@ int main(int argc, char* argv[])
     {
         if (dim == 2)
         {
-            NonStationaryNavierStokes<2> flow(mesh_file_name, 
+            NavierStokesFractional<2> flow(mesh_file_name, 
                                               degree_velocity, 
                                               degree_pressure, 
                                               T, 
@@ -96,7 +96,7 @@ int main(int argc, char* argv[])
         }
         else if (dim == 3)
         {
-            NonStationaryNavierStokes<3> flow(mesh_file_name, 
+            NavierStokesFractional<3> flow(mesh_file_name, 
                                               degree_velocity, 
                                               degree_pressure, 
                                               T, 

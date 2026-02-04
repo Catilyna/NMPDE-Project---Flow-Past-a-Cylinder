@@ -208,7 +208,7 @@ namespace NavierStokes{
                 : mpi_size(Utilities::MPI::n_mpi_processes(MPI_COMM_WORLD)), mpi_rank(Utilities::MPI::this_mpi_process(MPI_COMM_WORLD)), pcout(std::cout, mpi_rank == 0), mesh_file_name(mesh_file_name_), degree_velocity(degree_velocity_), degree_pressure(degree_pressure_), T(T_), delta_t(delta_t_), theta(theta_), gamma(delta_t) // why??
                   , viscosity(viscosity_), U_mean(U_mean_), time_dependency(time_dependency_), mesh(MPI_COMM_WORLD) {};
 
-            void run_time_simulation();
+            virtual void run_time_simulation();
 
         protected:
             void setup_dofs();
@@ -237,8 +237,6 @@ namespace NavierStokes{
             void compute_initial_guess(double step_size);
 
             void set_initial_condition();
-
-            void run();
 
             void compute_lift_drag();
 
@@ -306,7 +304,7 @@ namespace NavierStokes{
             const double T;               // final time
             const double delta_t;         // time step size
             double time = 0.0;            // current time
-            unsigned int timestep_number; // current time step number
+            unsigned int timestep_number = 0; // current time step number
             
             const double theta; // parameter for the theta-method
             

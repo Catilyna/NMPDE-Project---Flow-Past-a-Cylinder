@@ -35,4 +35,14 @@ add_executable(NavierStokes
 )
 deal_ii_setup_target(NavierStokes)
 
+add_executable(NavierStokesChorinTemam
+    src/test_fns.cpp
+    src/NavierStokesFractional.cpp
+    src/NonStationaryNavierStokes.cpp
+    src/preconditioners/BlockSchurPreconditioner.cpp
+    src/preconditioners/BlockTriangularPrecondition.cpp
+)
+deal_ii_setup_target(NavierStokesChorinTemam)
+
+
 
