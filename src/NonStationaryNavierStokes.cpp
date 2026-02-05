@@ -601,7 +601,7 @@ namespace NavierStokes{
 	{
     
 		const double D = 0.1;       		// Cylinder diameter
-		const double rho = 1.0;     		// Density
+		// const double rho = 1.0;     		// Density (in our case assumed as constant to 1, may be usefull in future implementations)
 		const double H_channel = 0.41; 		// Channel height (needed for 3D scaling)
 		
 		// Force accumulators
