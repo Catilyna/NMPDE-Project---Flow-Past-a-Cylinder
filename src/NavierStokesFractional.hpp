@@ -50,11 +50,11 @@ namespace NavierStokes
     
         void setup_fractional_step_system();
     
-        void assemble_step1_system(const bool initial_step, const bool assemble_matrix);
+        void assemble_step1_system(const bool assemble_matrix);
         
-        void assemble_step2_system(const bool initial_step, const bool assemble_matrix);
+        void assemble_step2_system(const bool assemble_matrix);
     
-        void assemble_step3_system(const bool initial_step, const bool assemble_matrix);
+        void assemble_step3_system(const bool assemble_matrix);
     
         void solve_step1();
         

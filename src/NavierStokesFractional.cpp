@@ -25,7 +25,7 @@ namespace NavierStokes
     }
     
     template<int dim>
-    void NavierStokesFractional<dim>::assemble_step1_system(const bool initial_step, const bool assemble_matrix)
+    void NavierStokesFractional<dim>::assemble_step1_system(const bool assemble_matrix)
     {
         if(assemble_matrix)
             step1_matrix = 0;
@@ -42,10 +42,6 @@ namespace NavierStokes
         const unsigned int dofs_per_cell = this->fe->n_dofs_per_cell();
         const unsigned int n_q_points = this->quadrature->size();
         const unsigned int n_q_face = this->quadrature_face->size();
-    
-        this->pcout << "dofs per cell:" << dofs_per_cell << "\n";
-        this->pcout << "quadrature points:" << n_q_points << "\n";
-        this->pcout << "quadrature face points:" << n_q_face << "\n";
         
         // for step 1 system we just require velocity
         const FEValuesExtractors::Vector velocities(0);
@@ -107,7 +103,7 @@ namespace NavierStokes
             cell->get_dof_indices(local_dof_indices);
             // this object here holds a list on constraint based on the fact wheter
             // this is the initial step or not.
-            const AffineConstraints<double> &constraints_used = initial_step ? this->nonzero_constraints : this->zero_constraints;
+            const AffineConstraints<double> &constraints_used = this->nonzero_constraints;
             
             if (assemble_matrix) {
                 constraints_used.distribute_local_to_global(local_matrix, local_rhs, local_dof_indices, step1_matrix, step1_rhs);
@@ -120,7 +116,7 @@ namespace NavierStokes
     };
     
     template <int dim>
-    void NavierStokesFractional<dim>::assemble_step2_system(const bool initial_step, const bool assemble_matrix)
+    void NavierStokesFractional<dim>::assemble_step2_system(const bool assemble_matrix)
     {
         // The pressure matrix is constant if the mesh is static like in this case. 
         if(assemble_matrix) step2_matrix = 0;
@@ -186,7 +182,7 @@ namespace NavierStokes
             };
             // this object here holds a list on constraint based on the fact wheter
             // this is the initial step or not.
-            const AffineConstraints<double> &constraints_used = initial_step ? this->nonzero_constraints : this->zero_constraints;
+            const AffineConstraints<double> &constraints_used = this->zero_constraints; // I consider zero constraints for step2 (and 3 aswell)
             
             if (assemble_matrix) {
                 constraints_used.distribute_local_to_global(local_matrix, local_rhs, local_dof_indices, step2_matrix, step2_rhs);
@@ -199,7 +195,7 @@ namespace NavierStokes
     }
     
     template <int dim>
-    void NavierStokesFractional<dim>::assemble_step3_system(const bool initial_step, const bool assemble_matrix)
+    void NavierStokesFractional<dim>::assemble_step3_system(const bool assemble_matrix)
     {
         if(assemble_matrix) step3_matrix = 0;
         step3_rhs = 0;
@@ -261,7 +257,7 @@ namespace NavierStokes
                 }
             }
             cell->get_dof_indices(local_dof_indices);
-            const AffineConstraints<double> &constraints_used = initial_step ? this->nonzero_constraints : this->zero_constraints;
+            const AffineConstraints<double> &constraints_used = this->zero_constraints;
             
             if (assemble_matrix) {
                 constraints_used.distribute_local_to_global(local_matrix, local_rhs, local_dof_indices, step3_matrix, step3_rhs);
@@ -276,25 +272,35 @@ namespace NavierStokes
     template <int dim>
     void NavierStokesFractional<dim>::solve_step1()
     {
-        SolverControl solver_control(10000, 1e-12, true);
-        
+        this->pcout << step1_rhs.l2_norm() << "\n";
+        SolverControl solver_control(10000, 1e-8, true);
+
         // Preconditioner: AMG (ML or MueLu) is perfect for Advection-Diffusion
-        TrilinosWrappers::PreconditionAMG preconditioner;
-        TrilinosWrappers::PreconditionAMG::AdditionalData data;
-        SolverCG<TrilinosWrappers::MPI::Vector> cg(solver_control);
-        
+        TrilinosWrappers::PreconditionILU preconditioner;
+        TrilinosWrappers::PreconditionILU::AdditionalData data;
+        if(this->mpi_size == 1) 
+            data.overlap = 0; // Increase if using many MPI processes
+        else
+            data.overlap = this->mpi_size * 2;
+
+        data.ilu_fill = 2;
+        data.ilu_atol = 1e-4;
+        data.ilu_rtol = 1.01; // setting the values suggested on the documentations.
+        SolverFGMRES<TrilinosWrappers::MPI::Vector> gmres(solver_control);
+
         preconditioner.initialize(step1_matrix.block(0,0), data);
     
         // Solve strictly on Block 0
-        cg.solve(step1_matrix.block(0,0), 
+        gmres.solve(step1_matrix.block(0,0), 
                      solution_tilde.block(0), 
                      step1_rhs.block(0), 
                      preconditioner);
     
         // set pressure DoFs to 0
         solution_tilde.block(1) = 0;
+        this->pcout << "Solution norm: " << this->solution.l2_norm() << "\n";
     }
-    
+
     /** @brief we solve the step2 computing the pressure relative block of the solution 
     */
     template <int dim>
@@ -304,14 +310,16 @@ namespace NavierStokes
         
         TrilinosWrappers::PreconditionAMG preconditioner;
         TrilinosWrappers::PreconditionAMG::AdditionalData data;
-        SolverFGMRES<TrilinosWrappers::MPI::Vector> gmres(solver_control);
+        data.elliptic = true; // enables optimization for elliptic problems (many parameters could be set here for optimization)
+
+        SolverCG<TrilinosWrappers::MPI::Vector> cg(solver_control); // since the matrix is SPD
         
         preconditioner.initialize(step2_matrix.block(0, 0), data);
 
         TrilinosWrappers::MPI::Vector pressure;
         pressure.reinit(step2_rhs.block(0));
     
-        gmres.solve(step2_matrix.block(0, 0), 
+        cg.solve(step2_matrix.block(0, 0), 
                      pressure, 
                      step2_rhs.block(0), 
                      preconditioner);
@@ -331,12 +339,13 @@ namespace NavierStokes
         correction_vector.reinit(solution_tilde.block(0));
     
         SolverControl solver_control(1000, 1e-12);
-        TrilinosWrappers::PreconditionSSOR preconditioner; // since the system is symmetric
+        TrilinosWrappers::PreconditionJacobi preconditioner;
         preconditioner.initialize(step3_matrix.block(0,0));
-        SolverFGMRES<TrilinosWrappers::MPI::Vector> gmres(solver_control);
+
+        SolverCG<TrilinosWrappers::MPI::Vector> cg(solver_control);
     
         // Solve: M * correction = - dt * (grad p, v) computed in the assemble method
-        gmres.solve(step3_matrix.block(0,0), 
+        cg.solve(step3_matrix.block(0,0), 
                      correction_vector, 
                      step3_rhs.block(0), 
                      preconditioner);
@@ -346,7 +355,7 @@ namespace NavierStokes
         // add the correction we calculated
         this->solution.block(0) += correction_vector; 
         
-        this->zero_constraints.distribute(this->solution);
+        this->nonzero_constraints.distribute(this->solution);
     }
     
     /** @brief Perform run time simulation of the solver running each step
@@ -356,8 +365,8 @@ namespace NavierStokes
     void NavierStokesFractional<dim>::run_time_simulation()
     {
         setup_fractional_step_system();
-        assemble_step2_system(true, true);
-        assemble_step3_system(true, true);
+        assemble_step2_system(true);
+        assemble_step3_system(true);
         double time = 0.0;
         double time_step = this->delta_t; // From base class
     
@@ -373,16 +382,15 @@ namespace NavierStokes
             this->old_solution = this->solution;
     
             // assemble step1 --> matrix changes at each iteration becaue of convection term
-            assemble_step1_system(false, true); 
+            assemble_step1_system(true); 
             solve_step1(); // Result stored in 'solution_tilde'
             
-            assemble_step2_system(false, false); 
+            assemble_step2_system(false); 
             solve_step2(); // Result stored in 'this->solution' (just the pressure block)
     
-            assemble_step3_system(false, false);
+            assemble_step3_system(false);
             solve_step3();
             
-    
             this->output_results();
         }
     }
