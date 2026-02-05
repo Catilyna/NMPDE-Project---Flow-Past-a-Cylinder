@@ -704,7 +704,8 @@ namespace NavierStokes{
 
 	/** @brief Function that runs the time simulation loop */
 	template <int dim>
-	void NonStationaryNavierStokes<dim>::run_time_simulation(){
+	void NonStationaryNavierStokes<dim>::run_time_simulation()
+	{
 		// Setting up initial conditions
 		{
 			initialize_system();

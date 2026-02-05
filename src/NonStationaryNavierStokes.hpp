@@ -196,6 +196,7 @@ namespace NavierStokes{
                 const double alpha = 1.0;
             };
 
+            // Constructor
             NonStationaryNavierStokes(const std::string &mesh_file_name_,
                                       const unsigned int &degree_velocity_,
                                       const unsigned int &degree_pressure_,
@@ -205,10 +206,26 @@ namespace NavierStokes{
                                       const double &U_mean_,
                                       const double &viscosity_,
                                       const bool time_dependency_)
-                : mpi_size(Utilities::MPI::n_mpi_processes(MPI_COMM_WORLD)), mpi_rank(Utilities::MPI::this_mpi_process(MPI_COMM_WORLD)), pcout(std::cout, mpi_rank == 0), mesh_file_name(mesh_file_name_), degree_velocity(degree_velocity_), degree_pressure(degree_pressure_), T(T_), delta_t(delta_t_), theta(theta_), gamma(delta_t) // why??
-                  , viscosity(viscosity_), U_mean(U_mean_), time_dependency(time_dependency_), mesh(MPI_COMM_WORLD) {};
+                                : viscosity(viscosity_)
+                                , gamma(delta_t_)
+                                , degree_velocity(degree_velocity_)
+                                , degree_pressure(degree_pressure_)
+                                , mpi_size(Utilities::MPI::n_mpi_processes(MPI_COMM_WORLD))
+                                , mpi_rank(Utilities::MPI::this_mpi_process(MPI_COMM_WORLD))
+                                , pcout(std::cout, mpi_rank == 0)
+                                , mesh_file_name(mesh_file_name_)
+                                , time_dependency(time_dependency_)
+                                , U_mean(U_mean_)
+                                , mesh(MPI_COMM_WORLD)
+                                , T(T_)
+                                , delta_t(delta_t_)
+                                , theta(theta_)
+                        {};
+            
+            // Default destructor (just for added clarity)
+            ~NonStationaryNavierStokes() = default;
 
-            virtual void run_time_simulation();
+            void run_time_simulation();
 
         protected:
             void setup_dofs();
@@ -291,7 +308,6 @@ namespace NavierStokes{
             TrilinosWrappers::BlockSparseMatrix system_matrix;
             TrilinosWrappers::BlockSparseMatrix pressure_mass;
 
-            // following Bucelli's convention
             TrilinosWrappers::MPI::BlockVector solution_owned;
             TrilinosWrappers::MPI::BlockVector solution;
             TrilinosWrappers::MPI::BlockVector system_rhs;
@@ -309,7 +325,7 @@ namespace NavierStokes{
             const double theta; // parameter for the theta-method
             
             // old and current solution storage (for time stepping)
-            TrilinosWrappers::MPI::BlockVector old_solution;
-            TrilinosWrappers::MPI::BlockVector present_solution;
+            mutable TrilinosWrappers::MPI::BlockVector old_solution;
+            mutable TrilinosWrappers::MPI::BlockVector present_solution;
     };
 }; // namespace NavierStokes

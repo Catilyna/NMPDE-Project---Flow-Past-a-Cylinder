@@ -16,7 +16,7 @@ int main(int argc, char* argv[])
     double U_mean = 0.45;
     int dim = 3;
 
-    for (int i = 0; i < args.size();++i){
+    for (size_t i = 0; i < args.size();++i){
         if (args[i] == "-h" || args[i] == "--help") {
             std::cout << "Usage: ...\n";
             return 0;
@@ -59,7 +59,7 @@ int main(int argc, char* argv[])
         }
         else if(args[i] == "-d") {
             if(i + 1 < args.size()) {
-                dim = std::stod(args[++i]);
+                dim = std::stoi(args[++i]);
             }else {
                 std::cout << "-d requires a interger argument..." << std::endl;
                 std::cout << "Exiting..." << std::endl;
@@ -83,28 +83,32 @@ int main(int argc, char* argv[])
     {
         if (dim == 2)
         {
-            NonStationaryNavierStokes<2> flow(mesh_file_name, 
-                                              degree_velocity, 
-                                              degree_pressure, 
-                                              T, 
-                                              delta_t,
-                                              theta, 
-                                              U_mean, 
-                                              viscosity, 
-                                              time_dependency);
+            NonStationaryNavierStokes<2> flow(
+                mesh_file_name,
+                degree_velocity,
+                degree_pressure,
+                T,
+                delta_t,
+                theta,
+                U_mean,
+                viscosity,
+                time_dependency
+            );
             flow.run_time_simulation();
         }
         else if (dim == 3)
         {
-            NonStationaryNavierStokes<3> flow(mesh_file_name, 
-                                              degree_velocity, 
-                                              degree_pressure, 
-                                              T, 
-                                              delta_t, 
-                                              theta, 
-                                              U_mean, 
-                                              viscosity, 
-                                              time_dependency);
+            NonStationaryNavierStokes<3> flow(
+                mesh_file_name,
+                degree_velocity,
+                degree_pressure,
+                T,
+                delta_t,
+                theta,
+                U_mean,
+                viscosity,
+                time_dependency
+            );
             flow.run_time_simulation();
         }
         else
