@@ -26,7 +26,13 @@ namespace NavierStokes
                                              U_mean_,
                                              viscosity_,
                                              time_dependency_) {};
-    
+        
+        ~NavierStokesFractional() override {
+            this->pcout << "Element out of scope...destructed" << "\n";
+        }
+
+        void setup_boundaries() override;
+
         void run_time_simulation() override;
     
     private:
@@ -35,7 +41,7 @@ namespace NavierStokes
         
         TrilinosWrappers::MPI::BlockVector step1_rhs;
     
-        // only velocity is used.
+        // Only velocity is used.
         TrilinosWrappers::MPI::BlockVector solution_tilde;
     
         // This matrix is CONSTANT in time.
@@ -43,11 +49,13 @@ namespace NavierStokes
     
         TrilinosWrappers::BlockSparseMatrix step3_matrix;
         
-        // RHS for Step 2.
         TrilinosWrappers::MPI::BlockVector step2_rhs;
     
         TrilinosWrappers::MPI::BlockVector step3_rhs;
-    
+
+        // Define the pressure constraints to apply to step 2
+        AffineConstraints<double> pressure_constraints;
+
         void setup_fractional_step_system();
     
         void assemble_step1_system(const bool assemble_matrix);

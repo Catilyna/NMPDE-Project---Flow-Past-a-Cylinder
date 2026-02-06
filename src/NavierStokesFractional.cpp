@@ -3,6 +3,7 @@
 #include <iomanip>
 #include <cstdio>
 #include <sstream>
+#include <chrono>
 
 namespace NavierStokes
 {
@@ -22,6 +23,80 @@ namespace NavierStokes
         step1_rhs.reinit(this->block_owned_dofs, MPI_COMM_WORLD);
         step2_rhs.reinit(this->block_owned_dofs, MPI_COMM_WORLD);
         step3_rhs.reinit(this->block_owned_dofs, MPI_COMM_WORLD);
+    }
+
+    template<int dim>
+    void NavierStokesFractional<dim>::setup_boundaries()
+    {
+        this->nonzero_constraints.clear();
+        
+        DoFTools::make_hanging_node_constraints(this->dof_handler, this->nonzero_constraints);
+        
+        // Define masks: We only want to constrain VELOCITY components here.
+        FEValuesExtractors::Vector velocity(0);
+        ComponentMask velocity_mask = this->fe->component_mask(velocity);
+        
+        {
+            std::map<types::boundary_id, const Function<dim> *> boundary_functions;
+            Functions::ZeroFunction<dim> zero_function(dim + 1);
+            boundary_functions[0] = this->inlet_velocity_function.get();
+
+            // ID 2, 3: Walls/Obstacle (Zero Velocity)
+            boundary_functions[2] = &zero_function; 
+            boundary_functions[3] = &zero_function; 
+            
+            // Note: ID 1 (Outlet) is OMITTED. This creates the "Do-Nothing" condition.
+            
+            VectorTools::interpolate_boundary_values(this->dof_handler,
+                boundary_functions,
+                this->nonzero_constraints,
+                velocity_mask);
+            }
+        this->nonzero_constraints.close();
+        // clear zero constraints now    
+        this->zero_constraints.clear();
+        DoFTools::make_hanging_node_constraints(this->dof_handler, this->zero_constraints);
+        {
+            std::map<types::boundary_id, const Function<dim> *> boundary_functions;
+            Functions::ZeroFunction<dim> zero_function(dim + 1);
+
+            // ID 0: Inlet -> ZERO (Don't change velocity during correction)
+            boundary_functions[0] = &zero_function; 
+            
+            // ID 2, 3: Walls -> ZERO
+            boundary_functions[2] = &zero_function;
+            boundary_functions[3] = &zero_function;
+
+            VectorTools::interpolate_boundary_values(this->dof_handler,
+                                                    boundary_functions,
+                                                    this->zero_constraints,
+                                                    velocity_mask);
+        }
+
+        this->zero_constraints.close();
+
+        pressure_constraints.clear(); // Make sure you added this object to your class!
+        DoFTools::make_hanging_node_constraints(this->dof_handler, pressure_constraints);
+        
+        // Extract strictly the pressure part of the system
+        std::vector<bool> pressure_components(dim + 1, false);
+        pressure_components[dim] = true; 
+        ComponentMask pressure_mask(pressure_components);
+
+        IndexSet pressure_dofs = DoFTools::extract_dofs(this->dof_handler, pressure_mask);
+        
+        // Only Processor 0 adds the line
+        if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0)
+        {
+            if (pressure_dofs.n_elements() > 0) {
+                // Pick the very first pressure DoF we own
+                const auto first_pressure_dof = pressure_dofs.nth_index_in_set(0);
+                
+                this->pressure_constraints.add_line(first_pressure_dof);
+                this->pressure_constraints.set_inhomogeneity(first_pressure_dof, 0.0);
+            }
+        }
+        pressure_constraints.close();
     }
     
     template<int dim>
@@ -51,7 +126,6 @@ namespace NavierStokes
     
         std::vector<types::global_dof_index> local_dof_indices(dofs_per_cell);
     
-        std::vector<Tensor<1, dim>> present_velocity_values(n_q_points);
         std::vector<Tensor<2, dim>> present_velocity_gradients(n_q_points);
     
         std::vector<Tensor<1, dim>> old_velocity_values(n_q_points);
@@ -69,7 +143,6 @@ namespace NavierStokes
             local_matrix         = 0.0;
             local_rhs            = 0.0;
     
-            fe_values[velocities].get_function_values(this->solution, present_velocity_values);
             fe_values[velocities].get_function_gradients(this->solution, present_velocity_gradients);
     
             // Same at old solution
@@ -91,15 +164,31 @@ namespace NavierStokes
                             // Viscous term (theta * nu * <grad u, grad v>)
                             local_matrix(i, j) += this->viscosity * scalar_product(grad_phi_u[i], grad_phi_u[j]) * fe_values.JxW(q);
     
-                            // Convective term (theta[< (grad u) u , v > + < (grad v) u, v >]), linearized 
                             // This linearizes the problem by using u_old as the advecting velocity
-                            local_matrix(i, j) += (old_velocity_values[q] * grad_phi_u[j]) * phi_u[i] * fe_values.JxW(q);
+                            local_matrix(i, j) += (grad_phi_u[j] * old_velocity_values[q]) * phi_u[i] * fe_values.JxW(q);
                         };
                     };
                     local_rhs(i) += (old_velocity_values[q] / this->delta_t) * phi_u[i] * fe_values.JxW(q);
                 };
     
             };
+            // boundary conditions
+			if(cell->at_boundary()){
+				for(size_t f = 0; f < cell->n_faces();++f){
+					// apply that to the outlet boundary where the id == 2 --> look gmsh to be sure
+					if(cell->face(f)->at_boundary() && cell->face(f)->boundary_id() == 2){
+						fe_face_values.reinit(cell, f);
+
+						for (size_t q = 0; q < n_q_face; ++q){
+							for (size_t i = 0; i < dofs_per_cell; ++i){
+									local_rhs(i) += -this->p_out * 
+										scalar_product(fe_face_values.normal_vector(q),
+										fe_face_values[velocities].value(i, q)) * fe_face_values.JxW(q);
+								}
+						}
+					}
+				}
+            }
             cell->get_dof_indices(local_dof_indices);
             // this object here holds a list on constraint based on the fact wheter
             // this is the initial step or not.
@@ -159,9 +248,7 @@ namespace NavierStokes
                     if(assemble_matrix)
                     {
                         // if i is a velocity dof it will return 0 on both
-                        const double         psi_p_i      = fe_values[pressure].value(i, q);
                         const Tensor<1, dim> grad_psi_p_i = fe_values[pressure].gradient(i, q);
-        
                         // in fact we loop over j just if i is a pressure dof
                         if (this->fe->system_to_component_index(i).first == dim) 
                         {
@@ -175,14 +262,19 @@ namespace NavierStokes
                                  }
                             }
                             // This term is non-zero only if 'i' is a pressure DoF
-                            local_rhs(i) -= (1.0 / this->delta_t) * div_intermediate_velocity[q] * psi_p_i * fe_values.JxW(q);
                         }              
                     };
+                    if (this->fe->system_to_component_index(i).first == dim) 
+                    {
+                        const double psi_p_i = fe_values[pressure].value(i, q);
+                        // -(1/dt) * (div u_tilde, q)
+                        local_rhs(i) -= (1.0 / this->delta_t) * div_intermediate_velocity[q] * psi_p_i * fe_values.JxW(q);
+                    }
                 };
             };
             // this object here holds a list on constraint based on the fact wheter
             // this is the initial step or not.
-            const AffineConstraints<double> &constraints_used = this->zero_constraints; // I consider zero constraints for step2 (and 3 aswell)
+            const AffineConstraints<double> &constraints_used = pressure_constraints; // I consider zero constraints for step2 (and 3 aswell)
             
             if (assemble_matrix) {
                 constraints_used.distribute_local_to_global(local_matrix, local_rhs, local_dof_indices, step2_matrix, step2_rhs);
@@ -229,7 +321,6 @@ namespace NavierStokes
             local_rhs = 0;
     
             fe_values[pressure].get_function_gradients(this->solution, pressure_gradients);
-            fe_values[velocities].get_function_values(this->solution_tilde, tilde_values);
             for (unsigned int q = 0; q < n_q_points; ++q)
             {
                 for (unsigned int i = 0; i < dofs_per_cell; ++i)
@@ -251,7 +342,6 @@ namespace NavierStokes
                         }
                     }
                     if (this->fe->system_to_component_index(i).first == dim) continue;
-                    local_rhs(i) += tilde_values[q] * phi_i * fe_values.JxW(q);
                     // rhs = - delta_t * (grad p * v)
                     local_rhs(i) -= this->delta_t * (pressure_gradients[q] * phi_i) * fe_values.JxW(q);
                 }
@@ -273,7 +363,9 @@ namespace NavierStokes
     void NavierStokesFractional<dim>::solve_step1()
     {
         this->pcout << step1_rhs.l2_norm() << "\n";
-        SolverControl solver_control(10000, 1e-8, true);
+        auto start = std::chrono::high_resolution_clock::now();
+
+        SolverControl solver_control(10000, 1e-10, true);
 
         // Preconditioner: AMG (ML or MueLu) is perfect for Advection-Diffusion
         TrilinosWrappers::PreconditionILU preconditioner;
@@ -281,9 +373,9 @@ namespace NavierStokes
         if(this->mpi_size == 1) 
             data.overlap = 0; // Increase if using many MPI processes
         else
-            data.overlap = this->mpi_size * 2;
+            data.overlap = this->mpi_size;
 
-        data.ilu_fill = 2;
+        data.ilu_fill = 1;
         data.ilu_atol = 1e-4;
         data.ilu_rtol = 1.01; // setting the values suggested on the documentations.
         SolverFGMRES<TrilinosWrappers::MPI::Vector> gmres(solver_control);
@@ -296,9 +388,14 @@ namespace NavierStokes
                      step1_rhs.block(0), 
                      preconditioner);
     
+        this->nonzero_constraints.distribute(solution_tilde); // distribute the constraints to the partial solution
         // set pressure DoFs to 0
         solution_tilde.block(1) = 0;
         this->pcout << "Solution norm: " << this->solution.l2_norm() << "\n";
+        auto end = std::chrono::high_resolution_clock::now();
+        std::chrono::duration<double> diff = end - start;
+        this->pcout << "Step 2 duration is: " << diff.count() << "\n";
+
     }
 
     /** @brief we solve the step2 computing the pressure relative block of the solution 
@@ -307,6 +404,7 @@ namespace NavierStokes
     void NavierStokesFractional<dim>::solve_step2()
     {
         SolverControl solver_control(10000, 1e-12, true);
+        auto start = std::chrono::high_resolution_clock::now();
         
         TrilinosWrappers::PreconditionAMG preconditioner;
         TrilinosWrappers::PreconditionAMG::AdditionalData data;
@@ -314,30 +412,36 @@ namespace NavierStokes
 
         SolverCG<TrilinosWrappers::MPI::Vector> cg(solver_control); // since the matrix is SPD
         
-        preconditioner.initialize(step2_matrix.block(0, 0), data);
+        preconditioner.initialize(step2_matrix.block(1, 1), data);
 
         TrilinosWrappers::MPI::Vector pressure;
-        pressure.reinit(step2_rhs.block(0));
+        pressure.reinit(step2_rhs.block(1));
     
-        cg.solve(step2_matrix.block(0, 0), 
+        cg.solve(step2_matrix.block(1, 1), 
                      pressure, 
-                     step2_rhs.block(0), 
+                     step2_rhs.block(1), 
                      preconditioner);
 
         this->solution.block(1) = pressure;
         // set pressure DoFs to 0
         solution_tilde.block(1) = 0;
+        pressure_constraints.distribute(this->solution);
+        auto end = std::chrono::high_resolution_clock::now();
+        std::chrono::duration<double> diff = end - start;
+        this->pcout << "Step 2 duration is: " << diff.count() << "\n";
     }
-    
+
     /** @brief we solve the step3 calculating the projection of the step3_rhs 
     */
     template <int dim>
     void NavierStokesFractional<dim>::solve_step3()
     {
         TrilinosWrappers::MPI::Vector correction_vector;
+        auto start = std::chrono::high_resolution_clock::now();
 
         correction_vector.reinit(solution_tilde.block(0));
-    
+
+        // using Jacobi since the system is very simple and SPD so no need of advanced preconditioners
         SolverControl solver_control(1000, 1e-12);
         TrilinosWrappers::PreconditionJacobi preconditioner;
         preconditioner.initialize(step3_matrix.block(0,0));
@@ -349,15 +453,18 @@ namespace NavierStokes
                      correction_vector, 
                      step3_rhs.block(0), 
                      preconditioner);
-    
+                     
+        this->zero_constraints.distribute(correction_vector); // we enforce zero constraints on the correction
         this->solution.block(0) = solution_tilde.block(0); // copy u_tilde into the final solution vector
         
         // add the correction we calculated
         this->solution.block(0) += correction_vector; 
         
-        this->nonzero_constraints.distribute(this->solution);
+        auto end = std::chrono::high_resolution_clock::now();
+        std::chrono::duration<double> diff = end - start;
+        this->pcout << "Step 3 duration is: " << diff.count() << "\n";
     }
-    
+
     /** @brief Perform run time simulation of the solver running each step
      * for each timestep.
      */
@@ -369,14 +476,15 @@ namespace NavierStokes
         assemble_step3_system(true);
         double time = 0.0;
         double time_step = this->delta_t; // From base class
-    
+        this->pcout << "delta t: " << time_step << "\n";
+
         while (time < this->T)
         {
             time += time_step;
             ++this->timestep_number;
 
             this->inlet_velocity_function->set_time(time);
-			this->setup_boundaries();
+			setup_boundaries();
 
 			this->pcout << "\nTime step " << this->timestep_number << ", time = " << time << std::endl;
             this->old_solution = this->solution;

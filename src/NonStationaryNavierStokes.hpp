@@ -223,14 +223,14 @@ namespace NavierStokes{
                         {};
             
             // Default destructor (just for added clarity)
-            ~NonStationaryNavierStokes() = default;
+            virtual ~NonStationaryNavierStokes() = default;
 
-            void run_time_simulation();
+            virtual void run_time_simulation();
 
         protected:
             void setup_dofs();
 
-            void setup_boundaries();
+            virtual void setup_boundaries(); // make it virtual so we can override it in derived classes
 
             void initialize_system();
 
