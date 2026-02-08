@@ -202,7 +202,9 @@ namespace NavierStokes{
 		// Maybe we need mean zero condition? We are not using Neummann BC, so maybe
 		// we should indeed use L2_0 mean zero condition.
 		// Moreover, in parallel only rank 0 should set this constraint, otherwise we will have conflicts.
-		if(this->mpi_rank == 0){
+		// OR MAYBE WE SHOULDNOT SET THE CONSTAINT AT ALL
+		// SINCE WE ARE FIXING THE WHOLE OUTLET PRESSURE TO 1.0
+		/*if(this->mpi_rank == 0){
 			// We need to identify the first pressure DoF and set it to zero to fix the null space.
 			std::vector<bool> pressure_components(dim + 1, false);
 			pressure_components[dim] = true; // pressure is last component
@@ -216,7 +218,7 @@ namespace NavierStokes{
 				zero_constraints.add_line(first_pressure_dof);
 				zero_constraints.set_inhomogeneity(first_pressure_dof, 0.0);
 			}
-		}
+		}*/
 	}
 
 	
@@ -736,6 +738,8 @@ namespace NavierStokes{
 			// se the inlet velocity inner time to the time of the simulation
 			inlet_velocity_function->set_time(time);
 			setup_boundaries();
+			// Project the new Dirichlet values into present_solution
+    		nonzero_constraints.distribute(present_solution);
 
 			pcout << "\nTime step " << timestep_number << ", time = " << time << std::endl;
 
