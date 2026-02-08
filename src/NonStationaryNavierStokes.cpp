@@ -352,7 +352,7 @@ namespace NavierStokes{
 			if(cell->at_boundary()){
 				for(size_t f = 0; f < cell->n_faces();++f){
 					// apply that to the outlet boundary where the id == 2 --> look gmsh to be sure
-					if(cell->face(f)->at_boundary() && cell->face(f)->boundary_id() == 2){
+					if(cell->face(f)->at_boundary() && cell->face(f)->boundary_id() == 1){
 						fe_face_values.reinit(cell, f);
 
 						for (size_t q = 0; q < n_q_face; ++q){

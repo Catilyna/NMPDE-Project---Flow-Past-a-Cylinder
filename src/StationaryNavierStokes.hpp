@@ -111,7 +111,7 @@ namespace NavierStokes{
     private:
         void setup_dofs();
 
-        virtual void setup_boundaries();
+        void setup_boundaries();
 
         void initialize_system();
 

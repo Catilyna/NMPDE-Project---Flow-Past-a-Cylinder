@@ -57,7 +57,9 @@ namespace NavierStokes
         AffineConstraints<double> pressure_constraints;
 
         void setup_fractional_step_system();
-    
+
+        void setup_step2_sp();
+
         void assemble_step1_system(const bool assemble_matrix);
         
         void assemble_step2_system(const bool assemble_matrix);
