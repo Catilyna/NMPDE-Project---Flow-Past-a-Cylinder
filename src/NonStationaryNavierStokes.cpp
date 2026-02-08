@@ -201,17 +201,21 @@ namespace NavierStokes{
 		// Fix pressure at one DoF to remove null space 
 		// Maybe we need mean zero condition? We are not using Neummann BC, so maybe
 		// we should indeed use L2_0 mean zero condition.
-		std::vector<bool> pressure_components(dim + 1, false);
-		pressure_components[dim] = true; // pressure is last component
-		ComponentMask pressure_mask(pressure_components);
+		// Moreover, in parallel only rank 0 should set this constraint, otherwise we will have conflicts.
+		if(this->mpi_rank == 0){
+			// We need to identify the first pressure DoF and set it to zero to fix the null space.
+			std::vector<bool> pressure_components(dim + 1, false);
+			pressure_components[dim] = true; // pressure is last component
+			ComponentMask pressure_mask(pressure_components);
 
-		IndexSet pressure_dofs = DoFTools::extract_dofs(dof_handler, pressure_mask);
-		if (pressure_dofs.n_elements() > 0) {
-		    const auto first_pressure_dof = pressure_dofs.nth_index_in_set(0);
-		    nonzero_constraints.add_line(first_pressure_dof);
-		    nonzero_constraints.set_inhomogeneity(first_pressure_dof, 0.0);
-		    zero_constraints.add_line(first_pressure_dof);
-		    zero_constraints.set_inhomogeneity(first_pressure_dof, 0.0);
+			IndexSet pressure_dofs = DoFTools::extract_dofs(dof_handler, pressure_mask);
+			if (pressure_dofs.n_elements() > 0) {
+				const auto first_pressure_dof = pressure_dofs.nth_index_in_set(0);
+				nonzero_constraints.add_line(first_pressure_dof);
+				nonzero_constraints.set_inhomogeneity(first_pressure_dof, 0.0);
+				zero_constraints.add_line(first_pressure_dof);
+				zero_constraints.set_inhomogeneity(first_pressure_dof, 0.0);
+			}
 		}
 	}
 
@@ -276,9 +280,12 @@ namespace NavierStokes{
 			local_rhs            = 0.0;
 
 			// We need to know the values and the gradient of velocity on quadrature nodes (explained by Bucelli)
-			fe_values[velocities].get_function_values(evaluation_point, present_velocity_values);
+			/*fe_values[velocities].get_function_values(evaluation_point, present_velocity_values);
 			fe_values[velocities].get_function_gradients(evaluation_point, present_velocity_gradients);
-			fe_values[pressure].get_function_values(evaluation_point, present_pressure_values);
+			fe_values[pressure].get_function_values(evaluation_point, present_pressure_values);*/
+			fe_values[velocities].get_function_values(solution, present_velocity_values);
+			fe_values[velocities].get_function_gradients(solution, present_velocity_gradients);
+			fe_values[pressure].get_function_values(solution, present_pressure_values);
 
 			// Same at old solution
 			fe_values[velocities].get_function_values(old_solution, old_velocity_values);
