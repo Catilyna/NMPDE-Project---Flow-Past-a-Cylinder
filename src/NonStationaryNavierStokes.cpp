@@ -587,6 +587,7 @@ namespace NavierStokes{
 		}
 	}
 
+	
 	/** @brief Set the initial condition for present_solution and old_solution. */
 	template <int dim>
 	void NonStationaryNavierStokes<dim>::set_initial_condition()
@@ -603,6 +604,25 @@ namespace NavierStokes{
 		pcout << "  Zero initial condition set." << std::endl;
 	}
 	
+	/** @brief Just an helper function that gets called at the start of the program 
+	 * to erase the content of the drag_lift_history.txt
+	 */
+	template<int dim>
+	void NonStationaryNavierStokes<dim>::erase_txt_content()
+	{
+		std::string filename = "../results/drag_lift_history.txt";
+		if(mpi_rank == 0)
+		{
+			std::filesystem::path path(filename);
+
+			if (std::filesystem::exists(path.parent_path())){
+				std::ofstream ofs;
+				ofs.open(filename, std::ofstream::out | std::ofstream::trunc); // open in output and erase the content of the file
+				ofs.close();
+			}
+		}
+	}
+
 	/** @brief Function to compute the the lift and drag coeffiencts 
 	 */
 	template <int dim>
@@ -719,6 +739,7 @@ namespace NavierStokes{
 		{
 			initialize_system();
 			set_initial_condition();
+			erase_txt_content();
 			time = 0.0;
 			timestep_number = 0;
 			// output_results(); I didnt get why we save result here

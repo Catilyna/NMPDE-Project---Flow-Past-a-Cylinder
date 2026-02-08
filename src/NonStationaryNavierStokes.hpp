@@ -56,6 +56,7 @@
 #include "./preconditioners/BlockTriangularPrecondition.hpp"
 #include "./preconditioners/PreconditionIdentity.h"
 #include <fstream>
+#include <filesystem>
 #include <iostream>
 #include <vector>
 #include <cmath>
@@ -254,6 +255,8 @@ namespace NavierStokes{
             void compute_initial_guess(double step_size);
 
             void set_initial_condition();
+
+            void erase_txt_content();
 
             void compute_lift_drag();
 
