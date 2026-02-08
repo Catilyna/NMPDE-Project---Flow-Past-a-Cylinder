@@ -249,8 +249,7 @@ namespace NavierStokes{
 
             void newton_iteration(const double tolerance,
                                   const unsigned int max_n_line_searches,
-                                  const bool is_initial_step,
-                                  const bool output_result);
+                                  const bool is_initial_step);
 
             void compute_initial_guess(double step_size);
 
@@ -278,6 +277,8 @@ namespace NavierStokes{
             const std::string mesh_file_name;
             const bool time_dependency;
             const double U_mean;
+
+            double reynolds_number;
 
             std::unique_ptr<Function<dim>> inlet_velocity_function;
 

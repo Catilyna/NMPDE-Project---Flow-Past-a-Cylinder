@@ -445,7 +445,7 @@ namespace NavierStokes{
 	 * 	this one 
 	 */
 	template <int dim>
-	void NonStationaryNavierStokes<dim>::newton_iteration(const double tolerance, const unsigned int max_n_line_searches, const bool is_initial_step, const bool output_result)
+	void NonStationaryNavierStokes<dim>::newton_iteration(const double tolerance, const unsigned int max_n_line_searches, const bool is_initial_step)
 	{
 		bool first_step = is_initial_step;
 		unsigned int line_search_n = 0;
@@ -502,12 +502,6 @@ namespace NavierStokes{
 		}
 		   // Distribute constraints to present_solution after Newton convergence
 		   nonzero_constraints.distribute(present_solution);
-  
-		   // output result decides wheter to store or not results.
-		   if (output_result) {
-			   output_results();
-			   // process_solution(); no need for now of this function call
-		   }
 	}
 	
 	/** @brief Function that just prints the output (pretty similar to Bucelli's) 
@@ -536,24 +530,15 @@ namespace NavierStokes{
 		data_out.add_data_vector(partitioning, "partitioning");
 		data_out.build_patches();
 
-		// Calculate Reynolds number
-		double reynolds_number;
-		if(dim == 2) 
-		{
-			reynolds_number = ( (2.0/3.0) * U_mean * 0.1 ) / viscosity;
-		}
-		else 
-		{
-			reynolds_number = ( (4.0/9.0) * U_mean * 0.1) / viscosity;
-		}
-
 		// here to insert correct Reynolds Number aswell REMEMBER THIS 
+		
 		const std::string output_file_name = std::to_string(static_cast<int>(std::round(reynolds_number))) 
 															+ "Re-NS_Solution_";
 		data_out.write_vtu_with_pvtu_record("../results/common/", // save all the solutions relative to a single execution in a folder
 											output_file_name,
 											timestep_number,
 											MPI_COMM_WORLD);
+		
 
 		pcout << "Output written to " << output_file_name << "." << std::endl;
 		pcout << "===============================================" << std::endl;
@@ -745,6 +730,16 @@ namespace NavierStokes{
 			// output_results(); I didnt get why we save result here
 		}
 
+		// compute Reynolds number just once
+		if(dim == 2) 
+		{
+			reynolds_number = ( (2.0/3.0) * U_mean * 0.1 ) / viscosity;
+		}
+		else 
+		{
+			reynolds_number = ( (4.0/9.0) * U_mean * 0.1) / viscosity;
+		}
+
 		pcout << "===============================================" << std::endl;
 		pcout << "Starting time simulation with: "
               << "\ndelta_t = " << delta_t 
@@ -760,7 +755,7 @@ namespace NavierStokes{
 			inlet_velocity_function->set_time(time);
 			setup_boundaries();
 			// Project the new Dirichlet values into present_solution
-    		nonzero_constraints.distribute(present_solution);
+			nonzero_constraints.distribute(present_solution);
 
 			pcout << "\nTime step " << timestep_number << ", time = " << time << std::endl;
 
@@ -771,9 +766,11 @@ namespace NavierStokes{
 			const bool is_initial_step = (timestep_number == 1);
 
 			// Assemble and solve the nonlinear system for this time step
-			newton_iteration(1e-5, 30, is_initial_step, true);
+			newton_iteration(1e-5, 30, is_initial_step);
 
 			compute_lift_drag();
+			
+			output_results();
 		}
 		
 		pcout << "Time simulation complete." << std::endl;
