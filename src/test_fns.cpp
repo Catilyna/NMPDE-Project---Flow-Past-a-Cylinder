@@ -16,7 +16,7 @@ int main(int argc, char* argv[])
     double U_mean = 0.45;
     int dim = 3;
 
-    for (int i = 0; i < args.size();++i){
+    for (size_t i = 0; i < args.size();++i){
         if (args[i] == "-h" || args[i] == "--help") {
             std::cout << "Usage: ...\n";
             return 0;
@@ -59,7 +59,7 @@ int main(int argc, char* argv[])
         }
         else if(args[i] == "-d") {
             if(i + 1 < args.size()) {
-                dim = std::stod(args[++i]);
+                dim = std::stoi(args[++i]);
             }else {
                 std::cout << "-d requires a interger argument..." << std::endl;
                 std::cout << "Exiting..." << std::endl;
