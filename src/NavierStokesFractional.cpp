@@ -123,7 +123,7 @@ namespace NavierStokes
         */
         // This is the "standard" way. No rank-checking needed.
 
-        Functions::ConstantFunction<dim> pressure_outlet_function(1.0, dim + 1);
+        Functions::ConstantFunction<dim> pressure_outlet_function(0.0, dim + 1);
 
         VectorTools::interpolate_boundary_values(this->dof_handler,
                                                 1, 
@@ -422,6 +422,9 @@ namespace NavierStokes
         solution_tilde.block(0) = distributed_solution;
         // set pressure DoFs to 0
         solution_tilde.block(1) = 0;
+        // Update ghost values for the tilde solution
+        this->nonzero_constraints.distribute(solution_tilde);
+        solution_tilde.block(0).update_ghost_values();
         // this->pcout << "Solution norm: " << this->solution.l2_norm() << "\n";
         auto end = std::chrono::high_resolution_clock::now();
         std::chrono::duration<double> diff = end - start;
@@ -458,7 +461,8 @@ namespace NavierStokes
         // this->pcout << "Solution: " << pressure.l2_norm() << "\n";
         // set pressure DoFs to 0
         solution_tilde.block(1) = 0;
-        pressure_constraints.distribute(this->solution.block(1));
+        pressure_constraints.distribute(this->solution);
+        this->solution.block(1).update_ghost_values();
         // this->pcout << "Solution: " << this->solution.block(1).l2_norm() << "\n";
         auto end = std::chrono::high_resolution_clock::now();
         std::chrono::duration<double> diff = end - start;
@@ -489,6 +493,8 @@ namespace NavierStokes
                      
         this->nonzero_constraints.distribute(distributed_solution); // we enforce zero constraints on the solution
         this->solution.block(0) = distributed_solution; // Copy the velocity part of the solution to the solution
+        this->nonzero_constraints.distribute(this->solution); // distribute the constraints to the solution
+        this->solution.block(0).update_ghost_values();
         
         auto end = std::chrono::high_resolution_clock::now();
         std::chrono::duration<double> diff = end - start;
