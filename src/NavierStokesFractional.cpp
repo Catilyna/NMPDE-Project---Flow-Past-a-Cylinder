@@ -405,15 +405,21 @@ namespace NavierStokes
         data.ilu_rtol = 1.01; // setting the values suggested on the documentations.
         SolverFGMRES<TrilinosWrappers::MPI::Vector> gmres(solver_control);
 
+        TrilinosWrappers::MPI::Vector distributed_solution; // solution vector with no ghost values, same size as rhs
+        distributed_solution.reinit(step1_rhs.block(0));
+
         preconditioner.initialize(step1_matrix.block(0,0), data);
 
         // Solve Block 0
         gmres.solve(step1_matrix.block(0,0), 
-                     solution_tilde.block(0), 
+                     distributed_solution, 
                      step1_rhs.block(0), 
                      preconditioner);
     
-        this->nonzero_constraints.distribute(solution_tilde); // distribute the constraints to the partial solution
+        this->nonzero_constraints.distribute(distributed_solution); // distribute the constraints to the partial solution
+
+        // Copy the velocity part of the solution to the tilde solution
+        solution_tilde.block(0) = distributed_solution;
         // set pressure DoFs to 0
         solution_tilde.block(1) = 0;
         // this->pcout << "Solution norm: " << this->solution.l2_norm() << "\n";
@@ -473,12 +479,16 @@ namespace NavierStokes
 
         SolverCG<TrilinosWrappers::MPI::Vector> cg(solver_control);
 
+        TrilinosWrappers::MPI::Vector distributed_solution; // solution vector with no ghost values, same size as rhs
+        distributed_solution.reinit(step3_rhs.block(0));
+
         cg.solve(step3_matrix.block(0,0), 
-                     this->solution.block(0), 
+                     distributed_solution, 
                      step3_rhs.block(0), 
                      preconditioner);
                      
-        this->nonzero_constraints.distribute(this->solution.block(0)); // we enforce zero constraints on the solution
+        this->nonzero_constraints.distribute(distributed_solution); // we enforce zero constraints on the solution
+        this->solution.block(0) = distributed_solution; // Copy the velocity part of the solution to the solution
         
         auto end = std::chrono::high_resolution_clock::now();
         std::chrono::duration<double> diff = end - start;
