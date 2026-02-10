@@ -140,14 +140,4 @@ int main(int argc, char* argv[])
               << "----------------------------------------------------" << std::endl;
         return 1;
     }
-    /*{
-        std::cerr << std::endl
-                  << std::endl
-                  << "----------------------------------------------------" << std::endl;
-        std::cerr << "Exception on processing: " << std::endl
-                  << exc.what() << std::endl
-                  << "Aborting!" << std::endl
-                  << "----------------------------------------------------" << std::endl;
-        return 1;
-    }*/
 }

@@ -5,6 +5,7 @@ int main(int argc, char* argv[])
 {
     using namespace NavierStokes;
     Utilities::MPI::MPI_InitFinalize mpi_init(argc, argv);
+    ConditionalOStream pcout(std::cout, Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0);
 
     std::vector<std::string> args(argv + 1, argv + argc);
 
@@ -17,14 +18,14 @@ int main(int argc, char* argv[])
 
     for (size_t i = 0; i < args.size();++i){
         if (args[i] == "-h" || args[i] == "--help") {
-            std::cout << "Usage: ...\n";
+            pcout << "Usage: ...\n";
             return 0;
         }
         else if(args[i] == "-f"){
             if (i+1 < args.size()) mesh_file_name = args[++i]; // increment i and assign the name to the mesh_filename
             else {
-                std::cout << "-f requires an argument..." << std::endl;
-                std::cout << "Exiting..." << std::endl;
+                pcout << "-f requires an argument..." << std::endl;
+                pcout << "Exiting..." << std::endl;
                 return 1;
             }
         }
@@ -32,8 +33,8 @@ int main(int argc, char* argv[])
             if(i+1 < args.size())
                 viscosity = std::stod(args[++i]); // increment i and assign to viscosity value
             else{
-                std::cout << "-v requires a float argument..." << std::endl;
-                std::cout << "Exiting..." << std::endl;
+                pcout << "-v requires a float argument..." << std::endl;
+                pcout << "Exiting..." << std::endl;
                 return 1;
             }
         }
@@ -41,8 +42,8 @@ int main(int argc, char* argv[])
             if(i+1 < args.size())
                 theta = std::stod(args[++i]);
             else{
-                std::cout << "-theta requires a float argument..." << std::endl;
-                std::cout << "Exiting..." << std::endl;
+                pcout << "-theta requires a float argument..." << std::endl;
+                pcout << "Exiting..." << std::endl;
                 return 1;
             }
         }
@@ -51,8 +52,8 @@ int main(int argc, char* argv[])
                 U_mean = std::stod(args[++i]);
             }
             else{
-                std::cout << "-u requires a float argument..." << std::endl;
-                std::cout << "Exiting..." << std::endl;
+                pcout << "-u requires a float argument..." << std::endl;
+                pcout << "Exiting..." << std::endl;
                 return 1;
             }
         }
@@ -60,18 +61,18 @@ int main(int argc, char* argv[])
             if(i + 1 < args.size()) {
                 dim = std::stoi(args[++i]);
             }else {
-                std::cout << "-d requires a interger argument..." << std::endl;
-                std::cout << "Exiting..." << std::endl;
+                pcout << "-d requires a interger argument..." << std::endl;
+                pcout << "Exiting..." << std::endl;
                 return 1;
             }
         }
     }
 
-    std::cout << "Running with:" << std::endl;
-    std::cout << "  Mesh: " << mesh_file_name << std::endl;
-    std::cout << "  Viscosity: " << viscosity << std::endl;
-    std::cout << "  Theta: " << theta << std::endl;
-    std::cout << "  U_mean: " << U_mean << std::endl;
+    pcout << "Running with:" << std::endl;
+    pcout << "  Mesh: " << mesh_file_name << std::endl;
+    pcout << "  Viscosity: " << viscosity << std::endl;
+    pcout << "  Theta: " << theta << std::endl;
+    pcout << "  U_mean: " << U_mean << std::endl;
 
     const unsigned int degree_velocity = 2;
     const unsigned int degree_pressure = 1;
