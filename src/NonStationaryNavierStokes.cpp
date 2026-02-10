@@ -111,6 +111,17 @@ namespace NavierStokes{
 		solution_owned.reinit(block_owned_dofs, MPI_COMM_WORLD);
 		solution.reinit(block_owned_dofs, block_relevant_dofs, MPI_COMM_WORLD);
 		old_solution.reinit(block_owned_dofs, block_relevant_dofs, MPI_COMM_WORLD);
+
+		// compute Reynolds Number
+		// compute Reynolds number just once
+		if(dim == 2) 
+		{
+			reynolds_number = ( (2.0/3.0) * U_mean * 0.1 ) / viscosity;
+		}
+		else 
+		{
+			reynolds_number = ( (4.0/9.0) * U_mean * 0.1) / viscosity;
+		}
 	}
 
 	/** @brief Function that setups the Dof handler for the Stationary Navier Stokes solver. 
@@ -728,16 +739,6 @@ namespace NavierStokes{
 			time = 0.0;
 			timestep_number = 0;
 			// output_results(); I didnt get why we save result here
-		}
-
-		// compute Reynolds number just once
-		if(dim == 2) 
-		{
-			reynolds_number = ( (2.0/3.0) * U_mean * 0.1 ) / viscosity;
-		}
-		else 
-		{
-			reynolds_number = ( (4.0/9.0) * U_mean * 0.1) / viscosity;
 		}
 
 		pcout << "===============================================" << std::endl;
