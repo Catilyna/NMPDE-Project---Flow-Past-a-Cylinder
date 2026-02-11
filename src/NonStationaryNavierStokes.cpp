@@ -48,10 +48,10 @@ namespace NavierStokes{
 
 		// Initialize Inlet velocity class based on the boolean value
 		if(time_dependency){
-			inlet_velocity_function = std::make_unique<InletVelocityTime>(U_mean);
+			inlet_velocity_function = std::make_unique<InletVelocityTime>(U_max);
 		}
 		else {
-			inlet_velocity_function = std::make_unique<InletVelocity>(U_mean);
+			inlet_velocity_function = std::make_unique<InletVelocity>(U_max);
 		}
 
 		// SETUP DOFS AND BOUNDARIES
@@ -116,11 +116,11 @@ namespace NavierStokes{
 		// compute Reynolds number just once
 		if(dim == 2) 
 		{
-			reynolds_number = ( (2.0/3.0) * U_mean * 0.1 ) / viscosity;
+			reynolds_number = ( (2.0/3.0) * U_max * 0.1 ) / viscosity;
 		}
 		else 
 		{
-			reynolds_number = ( (4.0/9.0) * U_mean * 0.1) / viscosity;
+			reynolds_number = ( (4.0/9.0) * U_max * 0.1) / viscosity;
 		}
 	}
 
@@ -426,7 +426,7 @@ namespace NavierStokes{
 		data.max_basis_size = 200; // increase from the default so that GMRES doesnt forget easily
 		// initialize object for solving the system
 
-		SolverControl solver_control(system_matrix.m(), 1e-4 * system_rhs.l2_norm(), true);
+		SolverControl solver_control(system_matrix.m()*1000, 1e-4 * system_rhs.l2_norm(), true);
 		SolverFGMRES<TrilinosWrappers::MPI::BlockVector> gmres(solver_control, data);
 		
 		// initialize ILU preconditioner with the pressure mass matrix we derived in the assemble() function
@@ -702,9 +702,9 @@ namespace NavierStokes{
 		// boundary normal vectors point out of the fluid	
 		global_force *= -1.0;
 
-		// Calculate Coefficients [C = 2 * Force / (rho * U_mean^2 * ReferenceArea)]
+		// Calculate Coefficients [C = [2] * Force / (rho * U_mean^2 * ReferenceArea)]
 		double reference_area = (dim == 2) ? D : (D * H_channel); 
-		double reference_velocity = (dim == 2) ? ((2.0 / 3.0) * U_mean) : (((4.0 / 9.0)) * U_mean); 
+		double reference_velocity = (dim == 2) ? ((2.0 / 3.0) * U_max) : (((4.0 / 9.0)) * U_max); 
 		double denom = reference_velocity * reference_velocity * reference_area;
 		
 		double drag_coeff = global_force[0] / denom; // Force in X

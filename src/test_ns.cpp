@@ -14,7 +14,7 @@ int main(int argc, char* argv[])
     std::string mesh_file_name = "../mesh/mesh3D_example.msh";
     double viscosity = 1.;
     double theta = 1.; // parameter for the theta method
-    double U_mean = 0.45;
+    double U_max = 0.45;
     int dim = 3;
 
     for (size_t i = 0; i < args.size();++i){
@@ -50,7 +50,7 @@ int main(int argc, char* argv[])
         }
         else if(args[i] == "-u"){
             if(i+1 < args.size()){
-                U_mean = std::stod(args[++i]);
+                U_max = std::stod(args[++i]);
             }
             else{
                 pcout << "-u requires a float argument..." << std::endl;
@@ -73,13 +73,13 @@ int main(int argc, char* argv[])
     pcout << "  Mesh: " << mesh_file_name << std::endl;
     pcout << "  Viscosity: " << viscosity << std::endl;
     pcout << "  Theta: " << theta << std::endl;
-    pcout << "  U_mean: " << U_mean << std::endl;
+    pcout << "  U_max: " << U_max << std::endl;
 
     const unsigned int degree_velocity = 2;
     const unsigned int degree_pressure = 1;
     const double T = 4.;              
     const double delta_t = 0.02;       // time step size
-    const bool time_dependency = true;
+    const bool time_dependency = false;
     try
     {
         if (dim == 2)
@@ -91,7 +91,7 @@ int main(int argc, char* argv[])
                 T,
                 delta_t,
                 theta,
-                U_mean,
+                U_max,
                 viscosity,
                 time_dependency
             );
@@ -106,7 +106,7 @@ int main(int argc, char* argv[])
                 T,
                 delta_t,
                 theta,
-                U_mean,
+                U_max,
                 viscosity,
                 time_dependency
             );

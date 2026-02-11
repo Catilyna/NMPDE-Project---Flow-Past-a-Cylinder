@@ -78,8 +78,8 @@ namespace NavierStokes{
             class InletVelocity : public Function<dim>
             {
             public:
-                InletVelocity(const double U_mean)
-                    : Function<dim>(dim + 1), U_mean(U_mean) {};
+                InletVelocity(const double U_max) 
+                    : Function<dim>(dim + 1), U_max(U_max) {};
 
                 virtual void
                 vector_value(const Point<dim> &p, Vector<double> &values) const override
@@ -97,10 +97,10 @@ namespace NavierStokes{
                         time_factor = 1.0;
                     }
                     if(dim == 2){
-                        values[0] = 4 * U_mean * p[1] * (H - p[1]) * time_factor / std::pow(H, 2.);
+                        values[0] = 4 * U_max * p[1] * (H - p[1]) * time_factor / std::pow(H, 2.);
                     }
                     else if(dim == 3){
-                        values[0] = 16 * U_mean * p[1] * p[2] * (H - p[1]) * (H - p[2]) * time_factor / std::pow(H, 4.);
+                        values[0] = 16 * U_max * p[1] * p[2] * (H - p[1]) * (H - p[2]) * time_factor / std::pow(H, 4.);
                     }
 
                     for (unsigned int i = 1; i < dim + 1; ++i)
@@ -128,10 +128,10 @@ namespace NavierStokes{
                     if (component == 0)
                     {
                         if(dim == 2){
-                            return 4 * U_mean * p[1] * (H - p[1]) * time_factor / std::pow(H, 2.);
+                            return 4 * U_max * p[1] * (H - p[1]) * time_factor / std::pow(H, 2.);
                         }
                         else if(dim == 3){
-                            return 16 * U_mean * p[1] * p[2] * (H - p[1]) * (H - p[2]) * time_factor / std::pow(H, 4.);
+                            return 16 * U_max * p[1] * p[2] * (H - p[1]) * (H - p[2]) * time_factor / std::pow(H, 4.);
                     }
                     }
                     else
@@ -142,7 +142,7 @@ namespace NavierStokes{
                 }
 
             protected:
-                const double U_mean;
+                const double U_max;
                 const double H = 0.41; // Height is 0.41 in both 2D and 3D
                 const double alpha = 1.0;
             };
@@ -150,8 +150,8 @@ namespace NavierStokes{
             class InletVelocityTime : public Function<dim>
             {
             public:
-                InletVelocityTime(const double U_mean)
-                    : Function<dim>(dim + 1), U_mean(U_mean) {};
+                InletVelocityTime(const double U_max)
+                    : Function<dim>(dim + 1), U_max(U_max) {};
 
                 virtual void
                 vector_value(const Point<dim> &p, Vector<double> &values) const override
@@ -161,9 +161,9 @@ namespace NavierStokes{
                     double time_factor{ std::sin((M_PI / 8.0) * (current_time)) };
                    
                     if(dim == 2){
-                        values[0] = 4 * U_mean * p[1] * (H - p[1]) * time_factor / std::pow(H, 2.);
+                        values[0] = 4 * U_max * p[1] * (H - p[1]) * time_factor / std::pow(H, 2.);
                     } else if(dim == 3){
-                        values[0] = 16 * U_mean * p[1] * p[2] * (H - p[1]) * (H - p[2]) * time_factor / std::pow(H, 4.);
+                        values[0] = 16 * U_max * p[1] * p[2] * (H - p[1]) * (H - p[2]) * time_factor / std::pow(H, 4.);
                     }
                     for (unsigned int i = 1; i < dim + 1; ++i)
                         values[i] = 0.0;
@@ -179,9 +179,9 @@ namespace NavierStokes{
                     if (component == 0)
                     {
                         if(dim == 2){
-                            return 4 * U_mean * p[1] * (H - p[1]) * time_factor / std::pow(H, 2.);
+                            return 4 * U_max * p[1] * (H - p[1]) * time_factor / std::pow(H, 2.);
                         } else if(dim == 3){
-                            return 16 * U_mean * p[1] * p[2] * (H - p[1]) * (H - p[2]) * time_factor / std::pow(H, 4.);
+                            return 16 * U_max * p[1] * p[2] * (H - p[1]) * (H - p[2]) * time_factor / std::pow(H, 4.);
                         }
                     }
                     else
@@ -192,7 +192,7 @@ namespace NavierStokes{
                 }
 
             protected:
-                const double U_mean;
+                const double U_max;
                 const double H = 0.41; // Height is 0.41 in both 2D and 3D
                 const double alpha = 1.0;
             };
@@ -204,7 +204,7 @@ namespace NavierStokes{
                                       const double &T_,
                                       const double &delta_t_,
                                       const double &theta_,
-                                      const double &U_mean_,
+                                      const double &U_max_,
                                       const double &viscosity_,
                                       const bool time_dependency_)
                                 : viscosity(viscosity_)
@@ -216,7 +216,7 @@ namespace NavierStokes{
                                 , pcout(std::cout, mpi_rank == 0)
                                 , mesh_file_name(mesh_file_name_)
                                 , time_dependency(time_dependency_)
-                                , U_mean(U_mean_)
+                                , U_max(U_max_)
                                 , mesh(MPI_COMM_WORLD)
                                 , T(T_)
                                 , delta_t(delta_t_)
@@ -276,7 +276,7 @@ namespace NavierStokes{
 
             const std::string mesh_file_name;
             const bool time_dependency;
-            const double U_mean;
+            const double U_max;
 
             double reynolds_number;
 
