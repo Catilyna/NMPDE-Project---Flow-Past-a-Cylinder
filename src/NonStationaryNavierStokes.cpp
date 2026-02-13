@@ -738,7 +738,7 @@ namespace NavierStokes{
 			erase_txt_content();
 			time = 0.0;
 			timestep_number = 0;
-			// output_results(); I didnt get why we save result here
+			output_results(); // save 0 initial condition (useful when dealing with Paraview to align numbering of timesteps between solver and Paraview)
 		}
 
 		pcout << "===============================================" << std::endl;
