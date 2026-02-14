@@ -14,7 +14,7 @@ int main(int argc, char* argv[])
     std::string mesh_file_name = "../mesh/mesh3D_example.msh";
     double viscosity = 1.;
     double theta = 1.; // parameter for the theta method
-    double U_mean = 0.45;
+    double U_max = 0.45;
     int dim = 3;
     bool help = false;
 
@@ -50,7 +50,7 @@ int main(int argc, char* argv[])
     pcout << "  Mesh: " << mesh_file_name << std::endl;
     pcout << "  Viscosity: " << viscosity << std::endl;
     pcout << "  Theta: " << theta << std::endl;
-    pcout << "  U_mean: " << U_mean << std::endl;
+    pcout << "  U_mean: " << U_max << std::endl;
 
     const unsigned int degree_velocity = 2;
     const unsigned int degree_pressure = 1;
@@ -67,7 +67,7 @@ int main(int argc, char* argv[])
                                               T, 
                                               delta_t,
                                               theta, 
-                                              U_mean, 
+                                              U_max, 
                                               viscosity, 
                                               time_dependency);
             flow.run_time_simulation();
@@ -80,7 +80,7 @@ int main(int argc, char* argv[])
                                               T, 
                                               delta_t, 
                                               theta, 
-                                              U_mean, 
+                                              U_max, 
                                               viscosity, 
                                               time_dependency);
             flow.run_time_simulation();
