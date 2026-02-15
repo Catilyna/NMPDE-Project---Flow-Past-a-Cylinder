@@ -26,6 +26,8 @@ int main(int argc, char* argv[])
         (option("-theta") & value("theta", theta))          % "Theta parameter (float)",
         (option("-u") & value("max_u", U_max))              % "Max velocity (float)",
         (option("-d") & value("dim", dim))                  % "Dimension (2 or 3)",
+        (option("-T") & value("T", T))                      % "Total simulation time (float)",
+        (option("-dt") & value("delta_t", delta_t))         % "Time step size (float)",
         option("-h", "--help").set(help)                    % "Show this help message"
     );
 
