@@ -17,6 +17,12 @@ int main(int argc, char* argv[])
     double U_max = 0.45;
     int dim = 3;
     bool help = false;
+    
+    constexpr int degree_velocity = 2;
+    constexpr int degree_pressure = 1;
+    double T = 2.;              
+    double delta_t = 0.01;       // time step size
+    const bool time_dependency = true;
 
     // define the dictionary with CLIPP
     using namespace clipp;
@@ -52,13 +58,8 @@ int main(int argc, char* argv[])
     pcout << "  Mesh: " << mesh_file_name << std::endl;
     pcout << "  Viscosity: " << viscosity << std::endl;
     pcout << "  Theta: " << theta << std::endl;
-    pcout << "  U_mean: " << U_max << std::endl;
+    pcout << "  U_max: " << U_max << std::endl;
 
-    const unsigned int degree_velocity = 2;
-    const unsigned int degree_pressure = 1;
-    const double T = 2.;              
-    const double delta_t = 0.01;       // time step size
-    const bool time_dependency = true;
     try
     {
         if (dim == 2)

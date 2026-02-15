@@ -19,10 +19,10 @@ int main(int argc, char* argv[])
     int dim = 3;
     bool help = false;
 
-    const unsigned int degree_velocity = 2;
-    const unsigned int degree_pressure = 1;
-    const double T = 5.;              
-    const double delta_t = 0.02;       // time step size
+    constexpr int degree_velocity = 2;
+    constexpr int degree_pressure = 1;
+    double T = 5.;              
+    double delta_t = 0.02;       // time step size
     const bool time_dependency = false;
 
     // define the dictionary with CLIPP
