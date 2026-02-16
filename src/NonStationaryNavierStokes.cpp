@@ -604,7 +604,7 @@ namespace NavierStokes{
 	 * to erase the content of the drag_lift_history.txt
 	 */
 	template<int dim>
-	void NonStationaryNavierStokes<dim>::erase_txt_content()
+	void NonStationaryNavierStokes<dim>::erase_txt_content() const
 	{
 		std::string filename = "../results/drag_lift_history.txt";
 		if(mpi_rank == 0)
@@ -622,7 +622,7 @@ namespace NavierStokes{
 	/** @brief Function to compute the the lift and drag coeffiencts 
 	 */
 	template <int dim>
-	void NonStationaryNavierStokes<dim>::compute_lift_drag()
+	void NonStationaryNavierStokes<dim>::compute_lift_drag() const
 	{
     
 		const double D = 0.1;       		// Cylinder diameter

@@ -223,15 +223,15 @@ namespace NavierStokes{
                                 , theta(theta_)
                         {};
             
-            // Default destructor (just for added clarity)
+            // Default destructor (declared as virtual since we have inheritance in the Chorin - Temam solver)
             virtual ~NonStationaryNavierStokes() = default;
 
-            virtual void run_time_simulation();
+            virtual void run_time_simulation(); // make it virtual so we can override it in derived classes (Chorin - Temam)
 
         protected:
             void setup_dofs();
 
-            virtual void setup_boundaries(); // make it virtual so we can override it in derived classes
+            virtual void setup_boundaries(); // make it virtual so we can override it in derived classes (Chorin - Temam)
 
             void initialize_system();
 
@@ -255,9 +255,9 @@ namespace NavierStokes{
 
             void set_initial_condition();
 
-            void erase_txt_content();
+            void erase_txt_content() const;
 
-            void compute_lift_drag();
+            void compute_lift_drag() const;
 
             // problem related values setup
             const double viscosity;
