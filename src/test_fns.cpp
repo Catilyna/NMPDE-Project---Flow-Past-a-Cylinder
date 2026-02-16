@@ -22,7 +22,7 @@ int main(int argc, char* argv[])
     constexpr int degree_pressure = 1;
     double T = 2.;              
     double delta_t = 0.01;       // time step size
-    const bool time_dependency = true;
+    const bool time_dependency = false;
 
     // define the dictionary with CLIPP
     using namespace clipp;
