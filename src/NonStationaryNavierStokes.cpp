@@ -312,32 +312,32 @@ namespace NavierStokes{
 				}
 			}*/
 			for (unsigned int q = 0; q < n_q_points; ++q) {
-				   for (unsigned int k = 0; k < dofs_per_cell; ++k) {
-					   div_phi_u[k] = fe_values[velocities].divergence(k, q);
-					   grad_phi_u[k] = fe_values[velocities].gradient(k, q);
-					   phi_u[k] = fe_values[velocities].value(k, q);
-					   phi_p[k] = fe_values[pressure].value(k, q);
-				   }
-				   for (unsigned int i = 0; i < dofs_per_cell; ++i) {
-					   if (assemble_matrix) {
-						   for (unsigned int j = 0; j < dofs_per_cell; ++j) {
-							    // time derivative term (1/delta_t)<u,v>
-							    local_matrix(i, j) +=  (1.0 / delta_t) * phi_u[i] * phi_u[j] * fe_values.JxW(q);
+				for (unsigned int k = 0; k < dofs_per_cell; ++k) {
+					div_phi_u[k] = fe_values[velocities].divergence(k, q);
+					grad_phi_u[k] = fe_values[velocities].gradient(k, q);
+					phi_u[k] = fe_values[velocities].value(k, q);
+					phi_p[k] = fe_values[pressure].value(k, q);
+				}
+				for (unsigned int i = 0; i < dofs_per_cell; ++i) {
+					if (assemble_matrix) {
+						for (unsigned int j = 0; j < dofs_per_cell; ++j) {
+							// time derivative term (1/delta_t)<u,v>
+							local_matrix(i, j) +=  (1.0 / delta_t) * phi_u[i] * phi_u[j] * fe_values.JxW(q);
 
-								// Viscous term (theta * nu * <grad u, grad v>)
-								local_matrix(i, j) += theta * viscosity * scalar_product(grad_phi_u[i], grad_phi_u[j]) * fe_values.JxW(q);
+							// Viscous term (theta * nu * <grad u, grad v>)
+							local_matrix(i, j) += theta * viscosity * scalar_product(grad_phi_u[i], grad_phi_u[j]) * fe_values.JxW(q);
 
-								// Convective term (theta[< (grad u) u , v > + < (grad v) u, v >]), linearized 
-								local_matrix(i, j) += theta * ( scalar_product(phi_u[i], present_velocity_gradients[q] * phi_u[j]) +  
-								scalar_product(phi_u[i], grad_phi_u[j] * present_velocity_values[q])   
+							// Convective term (theta[< (grad u) u , v > + < (grad v) u, v >]), linearized 
+							local_matrix(i, j) += theta * ( scalar_product(phi_u[i], present_velocity_gradients[q] * phi_u[j]) +  
+							scalar_product(phi_u[i], grad_phi_u[j] * present_velocity_values[q])   
 															  ) * fe_values.JxW(q);
 								
-								// Pressure terms (- theta < div v, q > - theta < div u, p >)
-								local_matrix(i, j) -= theta * (div_phi_u[i] * phi_p[j] * fe_values.JxW(q) 
+							// Pressure terms (- theta < div v, q > - theta < div u, p >)
+							local_matrix(i, j) -= theta * (div_phi_u[i] * phi_p[j] * fe_values.JxW(q) 
 															  + phi_p[i] * div_phi_u[j] * fe_values.JxW(q));
 
-								// added this, exactly how Bucelli implemented it. Seems to be needed for preconditioner stability
-								cell_pressure_mass_matrix(i, j) += phi_p[i] * phi_p[j] * fe_values.JxW(q);
+							// added this, exactly how Bucelli implemented it. Seems to be needed for preconditioner stability
+							cell_pressure_mass_matrix(i, j) += phi_p[i] * phi_p[j] * fe_values.JxW(q);
 						}
 					}
 					double present_velocity_divergence = trace(present_velocity_gradients[q]);
@@ -377,10 +377,10 @@ namespace NavierStokes{
 
 						for (size_t q = 0; q < n_q_face; ++q){
 							for (size_t i = 0; i < dofs_per_cell; ++i){
-									local_rhs(i) += -p_out * 
-										scalar_product(fe_face_values.normal_vector(q),
-										fe_face_values[velocities].value(i, q)) * fe_face_values.JxW(q);
-								}
+								local_rhs(i) += -p_out * 
+										        scalar_product(fe_face_values.normal_vector(q),
+										        fe_face_values[velocities].value(i, q)) * fe_face_values.JxW(q);
+							}
 						}
 					}
 				}
@@ -604,7 +604,7 @@ namespace NavierStokes{
 	 * to erase the content of the drag_lift_history.txt
 	 */
 	template<int dim>
-	void NonStationaryNavierStokes<dim>::erase_txt_content()
+	void NonStationaryNavierStokes<dim>::erase_txt_content() const
 	{
 		std::string filename = "../results/drag_lift_history.txt";
 		if(mpi_rank == 0)
@@ -622,7 +622,7 @@ namespace NavierStokes{
 	/** @brief Function to compute the the lift and drag coeffiencts 
 	 */
 	template <int dim>
-	void NonStationaryNavierStokes<dim>::compute_lift_drag()
+	void NonStationaryNavierStokes<dim>::compute_lift_drag() const
 	{
     
 		const double D = 0.1;       		// Cylinder diameter
@@ -738,7 +738,7 @@ namespace NavierStokes{
 			erase_txt_content();
 			time = 0.0;
 			timestep_number = 0;
-			// output_results(); I didnt get why we save result here
+			output_results(); // save 0 initial condition (useful when dealing with Paraview to align numbering of timesteps between solver and Paraview)
 		}
 
 		pcout << "===============================================" << std::endl;

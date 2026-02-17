@@ -160,10 +160,7 @@ namespace NavierStokes
     
         std::vector<types::global_dof_index> local_dof_indices(dofs_per_cell);
     
-        std::vector<Tensor<2, dim>> present_velocity_gradients(n_q_points);
-    
         std::vector<Tensor<1, dim>> old_velocity_values(n_q_points);
-        std::vector<Tensor<2, dim>> old_velocity_gradients(n_q_points);
     
         std::vector<double> div_phi_u(dofs_per_cell);          // divergence of velocity
         std::vector<Tensor<1, dim>> phi_u(dofs_per_cell);      // velocity
@@ -177,11 +174,7 @@ namespace NavierStokes
             local_matrix         = 0.0;
             local_rhs            = 0.0;
     
-            fe_values[velocities].get_function_gradients(this->solution, present_velocity_gradients);
-    
-            // Same at old solution
             fe_values[velocities].get_function_values(this->old_solution, old_velocity_values);
-            fe_values[velocities].get_function_gradients(this->old_solution, old_velocity_gradients);
             
             for (unsigned int q = 0; q < n_q_points; ++q) {
                 for (unsigned int k = 0; k < dofs_per_cell; ++k) {
@@ -339,6 +332,8 @@ namespace NavierStokes
             
         for (const auto &cell : this->dof_handler.active_cell_iterators())
         {
+            if (!cell->is_locally_owned()) continue;
+
             fe_values.reinit(cell);
             local_matrix = 0;
             local_rhs = 0;
@@ -391,7 +386,7 @@ namespace NavierStokes
         this->pcout << step1_rhs.l2_norm() << "\n";
         auto start = std::chrono::high_resolution_clock::now();
 
-        SolverControl solver_control(10000, 1e-10, true);
+        SolverControl solver_control(1000000, 1e-10, true);
 
         TrilinosWrappers::PreconditionILU preconditioner;
         TrilinosWrappers::PreconditionILU::AdditionalData data;
@@ -423,7 +418,6 @@ namespace NavierStokes
         // set pressure DoFs to 0
         solution_tilde.block(1) = 0;
         // Update ghost values for the tilde solution
-        this->nonzero_constraints.distribute(solution_tilde);
         solution_tilde.block(0).update_ghost_values();
         // this->pcout << "Solution norm: " << this->solution.l2_norm() << "\n";
         auto end = std::chrono::high_resolution_clock::now();
@@ -437,7 +431,7 @@ namespace NavierStokes
     template <int dim>
     void NavierStokesFractional<dim>::solve_step2()
     {
-        SolverControl solver_control(10000, 1e-12, true);
+        SolverControl solver_control(1000000, 1e-12, true);
         auto start = std::chrono::high_resolution_clock::now();
         
         TrilinosWrappers::PreconditionAMG preconditioner;
@@ -457,11 +451,10 @@ namespace NavierStokes
                  step2_rhs.block(1),
                  preconditioner);
 
+        pressure_constraints.distribute(pressure);
         this->solution.block(1) = pressure;
-        // this->pcout << "Solution: " << pressure.l2_norm() << "\n";
         // set pressure DoFs to 0
         solution_tilde.block(1) = 0;
-        pressure_constraints.distribute(this->solution);
         this->solution.block(1).update_ghost_values();
         // this->pcout << "Solution: " << this->solution.block(1).l2_norm() << "\n";
         auto end = std::chrono::high_resolution_clock::now();
@@ -477,7 +470,7 @@ namespace NavierStokes
         auto start = std::chrono::high_resolution_clock::now();
 
         // using Jacobi since the system is very simple and SPD so no need of advanced preconditioners
-        SolverControl solver_control(1000, 1e-12);
+        SolverControl solver_control(1000000, 1e-12);
         TrilinosWrappers::PreconditionJacobi preconditioner;
         preconditioner.initialize(step3_matrix.block(0,0));
 
@@ -491,9 +484,8 @@ namespace NavierStokes
                      step3_rhs.block(0), 
                      preconditioner);
                      
-        this->nonzero_constraints.distribute(distributed_solution); // we enforce zero constraints on the solution
+        this->nonzero_constraints.distribute(distributed_solution); // enforce boundary values on the solution
         this->solution.block(0) = distributed_solution; // Copy the velocity part of the solution to the solution
-        this->nonzero_constraints.distribute(this->solution); // distribute the constraints to the solution
         this->solution.block(0).update_ghost_values();
         
         auto end = std::chrono::high_resolution_clock::now();
@@ -513,19 +505,19 @@ namespace NavierStokes
         assemble_step2_system(true);
         assemble_step3_system(true);
         this->erase_txt_content();
-        double time = 0.0;
-        double time_step = this->delta_t; // From base class
-        this->pcout << "delta t: " << time_step << "\n";
+        this->time = 0.0;
+        this->pcout << "delta t: " << this->delta_t << "\n";
+        this->output_results(); // output initial condition)
 
-        while (time < this->T)
+        while (this->time < this->T)
         {
-            time += time_step;
+            this->time += this->delta_t;
             ++this->timestep_number;
 
-            this->inlet_velocity_function->set_time(time);
+            this->inlet_velocity_function->set_time(this->time);
 			setup_boundaries();
 
-			this->pcout << "\nTime step " << this->timestep_number << ", time = " << time << std::endl;
+			this->pcout << "\nTime step " << this->timestep_number << ", time = " << this->time << std::endl;
             this->old_solution = this->solution;
     
             // assemble step1 --> matrix changes at each iteration becaue of convection term
@@ -542,6 +534,9 @@ namespace NavierStokes
 
             this->output_results();
         }
+        this->pcout << "===============================================" << std::endl;
+        this->pcout << "Time simulation complete." << std::endl;
+		this->pcout << "===============================================" << std::endl;
     }
 	template class NavierStokesFractional<3>;
 

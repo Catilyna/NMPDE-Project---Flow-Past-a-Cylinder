@@ -1,5 +1,6 @@
 #include "NavierStokesFractional.hpp"
 #include <iostream>
+#include <clipp.h>
 
 int main(int argc, char* argv[])
 {
@@ -13,72 +14,52 @@ int main(int argc, char* argv[])
     std::string mesh_file_name = "../mesh/mesh3D_example.msh";
     double viscosity = 1.;
     double theta = 1.; // parameter for the theta method
-    double U_mean = 0.45;
+    double U_max = 0.45;
     int dim = 3;
+    bool help = false;
+    
+    constexpr int degree_velocity = 2;
+    constexpr int degree_pressure = 1;
+    double T = 2.;              
+    double delta_t = 0.01;       // time step size
+    const bool time_dependency = false;
 
-    for (size_t i = 0; i < args.size();++i){
-        if (args[i] == "-h" || args[i] == "--help") {
-            pcout << "Usage: ...\n";
-            return 0;
+    // define the dictionary with CLIPP
+    using namespace clipp;
+    auto cli = (
+        (option("-f") & value("filename", mesh_file_name))  % "Path to the mesh file",
+        (option("-v") & value("visc", viscosity))           % "Viscosity value (float)",
+        (option("-theta") & value("theta", theta))          % "Theta parameter (float)",
+        (option("-u") & value("max_u", U_max))              % "Max velocity (float)",
+        (option("-d") & value("dim", dim))                  % "Dimension (2 or 3)",
+        (option("-T") & value("T", T))                      % "Total simulation time (float)",
+        (option("-dt") & value("delta_t", delta_t))         % "Time step size (float)",
+        option("-h", "--help").set(help)                    % "Show this help message"
+    );
+
+    // Execute and manage the parsing
+    if (!parse(argc, argv, cli)) {
+        pcout << "Error on using comands.\n";
+        if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0) {
+            std::cout << make_man_page(cli, argv[0]);
         }
-        else if(args[i] == "-f"){
-            if (i+1 < args.size()) mesh_file_name = args[++i]; // increment i and assign the name to the mesh_filename
-            else {
-                pcout << "-f requires an argument..." << std::endl;
-                pcout << "Exiting..." << std::endl;
-                return 1;
-            }
+        return 1;
+    }
+
+    // Help (automatic) management 
+    if (help) {
+        if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0) {
+            std::cout << make_man_page(cli, argv[0]);
         }
-        else if(args[i] == "-v"){
-            if(i+1 < args.size())
-                viscosity = std::stod(args[++i]); // increment i and assign to viscosity value
-            else{
-                pcout << "-v requires a float argument..." << std::endl;
-                pcout << "Exiting..." << std::endl;
-                return 1;
-            }
-        }
-        else if(args[i] == "-theta"){
-            if(i+1 < args.size())
-                theta = std::stod(args[++i]);
-            else{
-                pcout << "-theta requires a float argument..." << std::endl;
-                pcout << "Exiting..." << std::endl;
-                return 1;
-            }
-        }
-        else if(args[i] == "-u"){
-            if(i+1 < args.size()){
-                U_mean = std::stod(args[++i]);
-            }
-            else{
-                pcout << "-u requires a float argument..." << std::endl;
-                pcout << "Exiting..." << std::endl;
-                return 1;
-            }
-        }
-        else if(args[i] == "-d") {
-            if(i + 1 < args.size()) {
-                dim = std::stoi(args[++i]);
-            }else {
-                pcout << "-d requires a interger argument..." << std::endl;
-                pcout << "Exiting..." << std::endl;
-                return 1;
-            }
-        }
+        return 0;
     }
 
     pcout << "Running with:" << std::endl;
     pcout << "  Mesh: " << mesh_file_name << std::endl;
     pcout << "  Viscosity: " << viscosity << std::endl;
     pcout << "  Theta: " << theta << std::endl;
-    pcout << "  U_mean: " << U_mean << std::endl;
+    pcout << "  U_max: " << U_max << std::endl;
 
-    const unsigned int degree_velocity = 2;
-    const unsigned int degree_pressure = 1;
-    const double T = 2.;              
-    const double delta_t = 0.01;       // time step size
-    const bool time_dependency = true;
     try
     {
         if (dim == 2)
@@ -89,7 +70,7 @@ int main(int argc, char* argv[])
                                               T, 
                                               delta_t,
                                               theta, 
-                                              U_mean, 
+                                              U_max, 
                                               viscosity, 
                                               time_dependency);
             flow.run_time_simulation();
@@ -102,7 +83,7 @@ int main(int argc, char* argv[])
                                               T, 
                                               delta_t, 
                                               theta, 
-                                              U_mean, 
+                                              U_max, 
                                               viscosity, 
                                               time_dependency);
             flow.run_time_simulation();

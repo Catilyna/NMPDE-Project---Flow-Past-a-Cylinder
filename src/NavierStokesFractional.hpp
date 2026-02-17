@@ -28,7 +28,7 @@ namespace NavierStokes
                                              time_dependency_) {};
         
         ~NavierStokesFractional() override {
-            this->pcout << "Element out of scope...destructed" << "\n";
+            this->pcout << "Invoking destructor for NavierStokesFractional... Destructed" << "\n";
         }
 
         void setup_boundaries() override;

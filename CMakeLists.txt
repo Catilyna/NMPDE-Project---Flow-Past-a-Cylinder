@@ -11,6 +11,7 @@ set(DEAL_II_DIR "/u/sw/toolchains/gcc-glibc/11.2.0/pkgs/dealii/9.5.1" CACHE PATH
 find_package(deal.II REQUIRED HINTS ${DEAL_II_DIR} NO_DEFAULT_PATH)
 
 include(./common/cmake-common.cmake)
+include_directories("${PROJECT_SOURCE_DIR}/include")
 
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
 
