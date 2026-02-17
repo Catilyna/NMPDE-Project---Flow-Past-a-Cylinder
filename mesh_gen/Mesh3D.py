@@ -7,7 +7,7 @@ class Mesh3D:
     Class used to initialize a 3D mesh for a Navier-Stokes equation problem.
     Uses the OpenCASCADE (OCC) kernel for Constructive Solid Geometry (CSG).
     """
-    def __init__(self, L, H, W, cylinder = True):
+    def __init__(self, L, H, W, cylinder = True, coarse = True):
         self.L = L
         self.H = H
         self.W = W # Width of the channel
@@ -22,8 +22,8 @@ class Mesh3D:
         self.outer_surface_tags = []
         
         # determines if to create a cylindrical obstacle or not
-        self.cylinder = cylinder        
-        
+        self.cylinder = cylinder       
+        self.coarse = coarse 
 
     def create_geometry(self, cx, cz, r):
         """
@@ -130,7 +130,10 @@ class Mesh3D:
         self.set_physical_groups()
         
         # lcMin/Max might need to be larger for 3D to keep cell count reasonable and not stress RAM
-        self.set_fields(distMin=0.05, distMax=0.15, lcMin=0.02, lcMax=0.06)
+        if self.coarse:
+            self.set_fields(distMin=0.05, distMax=0.15, lcMin=0.02, lcMax=0.06)
+        else:
+            self.set_fields(distMin=0.03, distMax=0.10, lcMin=0.01, lcMax=0.03)
         """
         CHANGE THIS PREVIOUS VALUES TO DEFINE THE REFINEMENT OF THE MESH:
         GENERIC PARAMETERS WE ARE USING FOR NOW (AT LEAST HOW I DID FOR FIRST TESTS):
@@ -149,7 +152,8 @@ class Mesh3D:
         gmsh.write(f"{output_dir}/{output_filename}.msh")
         print(f"3D Mesh written to {output_dir}/{output_filename}.msh")
 
-        gmsh.fltk.run()
+        # Optional to visualize the mesh 
+        #gmsh.fltk.run()
 
         gmsh.finalize()
 
@@ -176,14 +180,24 @@ def main():
                         help='filename')
     
     args = parser.parse_args()
-    cyls_name = f"{args.name}_cylinder"
-    prl_name = f"{args.name}_parallelepiped"
     
-    mesh = Mesh3D(args.length, args.height, args.width)
-    mesh.build(args.cx, args.cz, args.radius, cyls_name)
     
-    mesh_square = Mesh3D(args.length, args.height, args.width, False)
-    mesh_square.build(args.cx, args.cz, args.radius, prl_name)
+    # generate the four meshes for the simulation
+    mesh_cyl_coarse = Mesh3D(args.length, args.height, args.width)
+    cyls_name = f"{args.name}_coarse_cylinder"
+    mesh_cyl_coarse.build(args.cx, args.cz, args.radius, cyls_name)
+    
+    mesh_square_coarse = Mesh3D(args.length, args.height, args.width, False, True)
+    prl_name = f"{args.name}_coarse_parallelepiped"
+    mesh_square_coarse.build(args.cx, args.cz, args.radius, prl_name)
+    
+    mesh_cyl_fin = Mesh3D(args.length, args.height, args.width, True, False)
+    cyls_name = f"{args.name}_fine_cylinder"
+    mesh_cyl_fin.build(args.cx, args.cz, args.radius, cyls_name)
+    
+    mesh_square_fin = Mesh3D(args.length, args.height, args.width, False, False)
+    prl_name = f"{args.name}_fine_parallelepiped"
+    mesh_square_fin.build(args.cx, args.cz, args.radius, prl_name)
 
 if __name__ == "__main__":
     main()

@@ -5,7 +5,7 @@ class Mesh2D:
     """
     Class used to inizialize mesh for a Navier Stokes equation problem
     """
-    def __init__(self, L, H):
+    def __init__(self, L, H, coarse = True):
         self.l = L
         self.h = H
         
@@ -20,6 +20,7 @@ class Mesh2D:
         self.circle_loop = None
         
         self.surface = None
+        self.coarse = coarse
         
         
     def create_rect(self):
@@ -92,13 +93,16 @@ class Mesh2D:
         
         gmsh.model.geo.synchronize()
         
-        self.setFields(0.0075, 0.25, 0.01, 0.05, 100)       
-        
+        if self.coarse:
+            self.setFields(0.01, 0.5, 0.02, 0.1, 100)       
+        else:
+            self.setFields(0.0075, 0.25, 0.01, 0.05, 100)       
+            
         gmsh.model.mesh.generate(2) # Generate 2D mesh
         gmsh.write(f"../mesh/2D/{output_filename}.msh")
 
         # Launch GUI to see the result (optional)
-        gmsh.fltk.run()
+        # gmsh.fltk.run()
 
         gmsh.finalize()
         
@@ -107,16 +111,16 @@ def main():
     parser = argparse.ArgumentParser(description="Generate a 2D rectangular mesh for deal.II")
 
     # Geometric Arguments
-    parser.add_argument('-L', '--length', type=float, default=2.0, 
-                        help='Length of the domain (default: 2.0)')
-    parser.add_argument('-H', '--height', type=float, default=1.0, 
-                        help='Height of the domain (default: 1.0)')
+    parser.add_argument('-L', '--length', type=float, default=2.2, 
+                        help='Length of the domain (default: 2.2)')
+    parser.add_argument('-H', '--height', type=float, default=0.41, 
+                        help='Height of the domain (default: 0.41)')
     
-    parser.add_argument('-cx', '--cx', type=float, default=1.0, 
+    parser.add_argument('-cx', '--cx', type=float, default=0.2, 
                         help='Set the cx of the center ot the cilinder')
-    parser.add_argument('-cy', '--cy', type=float, default=0.5, 
+    parser.add_argument('-cy', '--cy', type=float, default=0.2, 
                         help='Set the cy of the center ot the cilinder')
-    parser.add_argument('-r', '--radius', type=float, default=0.1, 
+    parser.add_argument('-r', '--radius', type=float, default=0.05, 
                         help='Set the radius of the cilinder')
     parser.add_argument('-n', '--name', type=str, default="mesh2D", 
                         help='filename')
@@ -124,8 +128,13 @@ def main():
     # Parse the arguments
     args = parser.parse_args()
     
-    mesh = Mesh2D(args.length, args.height)
-    mesh.build(args.cx, args.cy, args.radius, args.name)
+    mesh_coarse = Mesh2D(args.length, args.height, True)
+    cyls_name = f"{args.name}_coarse_cylinder"
+    mesh_coarse.build(args.cx, args.cy, args.radius, cyls_name)
+    
+    mesh_fine = Mesh2D(args.length, args.height, False)
+    cyls_name = f"{args.name}_fine_cylinder"
+    mesh_fine.build(args.cx, args.cy, args.radius, cyls_name)
 
 
 if __name__ == "__main__":
