@@ -60,45 +60,43 @@ Meshes will be generated inside the `./mesh` directory, while executables will b
 - First 2D test commands execution:
 
 ```bash
-./NavierStokes -d 2 -f ../mesh/2D/mesh2D_coarse_cylinder.msh -v 0.001 -u 0.3 -T 5.0 -dt 0.2 -td false
+./NavierStokes -d 2 -f ../mesh/2D/mesh2D_coarse_cylinder.msh -v 0.001 -u 0.3 -T 5.0 -dt 0.02 -td false
 ```
 
 - Second 2D test commands execution:
 
 ```bash
-./NavierStokes -d 2 -f ../mesh/2D/mesh2D_coarse_cylinder.msh -v 0.001 -u 1.5 -T 5.0 -dt 0.2 -td false
+./NavierStokes -d 2 -f ../mesh/2D/mesh2D_coarse_cylinder.msh -v 0.001 -u 1.5 -T 5.0 -dt 0.02 -td false
 ```
 
 - Third 2D test commands execution:
 
 ```bash
-
+./NavierStokes -d 2 -f ../mesh/2D/mesh2D_coarse_cylinder.msh -v 0.001 -u 1.5 -T 8.0 -dt 0.02 -td true
 ```
 
 - First 3D test commands execution:
 
 ```bash
-
+./NavierStokes -d 3 -f ../mesh/3D/mesh3D_coarse_cylinder.msh -v 0.001 -u 0.45 -T 4.0 -dt 0.02 -td false
 ```
 
 - Second 3D test commands execution:
 
 ```bash
-./NavierStokes -d 3 -f ../mesh/3D/mesh3D_coarse_cylinder.msh -v 0.001 -u 2.25 -T 4.0 -dt 0.2 -td false
+./NavierStokes -d 3 -f ../mesh/3D/mesh3D_coarse_cylinder.msh -v 0.001 -u 2.25 -T 4.0 -dt 0.02 -td false
 ```
 
 - Third 3D test commands execution:
 
 ```bash
-./NavierStokes -d 3 -f ../mesh/3D/mesh3D_coarse_cylinder.msh -v 0.001 -u 2.25 -T 4.0 -dt 0.2 -td true
+./NavierStokes -d 3 -f ../mesh/3D/mesh3D_coarse_cylinder.msh -v 0.001 -u 2.25 -T 4.0 -dt 0.02 -td true
 ```
 
 - Example test in order to show Chorin Temam potential with high Reynolds numbers:
 
-(Luca inserisci i dati sulla simulazione da te fatta)
-
 ```bash
-./NavierStokesChorinTemam
+./NavierStokesChorinTemam -d 2 -f ../mesh/2D/mesh2D_fine_cylinder.msh -v 0.001 -u 15.0 -T 5.0 -dt 0.001 -td false
 ```
 
 **Some usefull remarks:**
