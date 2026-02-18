@@ -11,7 +11,7 @@ int main(int argc, char* argv[])
     std::vector<std::string> args(argv + 1, argv + argc);
 
     // set some defaults
-    std::string mesh_file_name = "../mesh/mesh3D_example.msh";
+    std::string mesh_file_name = "../mesh/mesh3D_coarse_cylinder.msh";
     double viscosity = 1.;
     double theta = 1.; // parameter for the theta method
     double U_max = 0.45;
@@ -22,7 +22,7 @@ int main(int argc, char* argv[])
     constexpr int degree_pressure = 1;
     double T = 2.;              
     double delta_t = 0.01;       // time step size
-    const bool time_dependency = false;
+    bool t_dep = false;    // inlet velocity is sinusoidal (true) or a ramp (false)
 
     // define the dictionary with CLIPP
     using namespace clipp;
@@ -34,23 +34,19 @@ int main(int argc, char* argv[])
         (option("-d") & value("dim", dim))                  % "Dimension (2 or 3)",
         (option("-T") & value("T", T))                      % "Total simulation time (float)",
         (option("-dt") & value("delta_t", delta_t))         % "Time step size (float)",
+        (option("-td") & value("t dep", t_dep))             % "Variable inlet velocity",
         option("-h", "--help").set(help)                    % "Show this help message"
     );
 
     // Execute and manage the parsing
     if (!parse(argc, argv, cli)) {
         pcout << "Error on using comands.\n";
-        if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0) {
-            std::cout << make_man_page(cli, argv[0]);
-        }
+        pcout << make_man_page(cli, argv[0]);
         return 1;
     }
 
-    // Help (automatic) management 
     if (help) {
-        if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0) {
-            std::cout << make_man_page(cli, argv[0]);
-        }
+        pcout << make_man_page(cli, argv[0]);
         return 0;
     }
 
@@ -72,7 +68,7 @@ int main(int argc, char* argv[])
                                               theta, 
                                               U_max, 
                                               viscosity, 
-                                              time_dependency);
+                                              t_dep);
             flow.run_time_simulation();
         }
         else if (dim == 3)
@@ -85,7 +81,7 @@ int main(int argc, char* argv[])
                                               theta, 
                                               U_max, 
                                               viscosity, 
-                                              time_dependency);
+                                              t_dep);
             flow.run_time_simulation();
         }
         else

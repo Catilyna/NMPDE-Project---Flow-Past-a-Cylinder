@@ -1,37 +1,116 @@
-### Organizing the source code
+# NAVIER STOKES SOLVER (NMPDE Project)
 
-Please place all your sources into the `src` folder.
+**Overview**
 
-Binary files must not be uploaded to the repository (including executables).
+This repository contains a C++ finite element solver for the incompressible Navier-Stokes equations, developed as a project for the Numerical Methods for Partial Differential Equations course.
 
-Mesh files should not be uploaded to the repository. If applicable, upload `gmsh` scripts with suitable instructions to generate the meshes (and ideally a Makefile that runs those instructions). If not applicable, consider uploading the meshes to a different file sharing service, and providing a download link as part of the building and running instructions.
+The project is built on top of the open-source deal.II finite element library and provides two distinct numerical approaches for solving the fluid dynamics equations: a classical fully coupled monolithic solver, and a fractional-step projection method.
 
-### Compiling
+### Dependencies
 
-To build the executable, make sure you have loaded the needed modules with
+To compile and run this project, you will need the following installed on your system:
+
+- **C++ Compiler**: GCC/G++
+
+- **deal.II**: Finite element library (with MPI and Trilinos support)
+
+- **CMake**: Version 3.10 or higher
+
+- **Python 3**: With venv support (for automated mesh generation)
+
+- **ParaView**: For visualizing output files
+
+### Instructions
+
+This project automatically builds all the necessary files for solvers execution. In particular, the CMake build system creates a Python virtual environment and install the required packages for mesh generation.
+
+**Step by step guide to the execution:**
+
+- Clone the repository and navigate into it:
+
+```bash
+git clone https://github.com/Catilyna/NMPDE-Project---Flow-Past-a-Cylinder.git
+cd NPDE-Project---Flow-Past-a-Cylinder
+```
+
+- Load necessary modules:
 
 ```bash
 $ module load gcc-glibc dealii
 ```
 
-Then run the following commands:
+- Run the following preliminary commands:
 
 ```bash
-$ mkdir build
-$ cd build
-$ cmake ..
-$ make
+mkdir build
+cd build
+cmake ..
 ```
 
-The executable will be created into `build`, and can be executed through
+- Compile the executables and create meshes with a single command inside the `build` directory:
 
 ```bash
-$ ./executable-name
+make
 ```
 
-Example commands
+Meshes will be generated inside the `./mesh` directory, while executables will be created into `./build`.
+
+### Execution:
+
+- First 2D test commands execution:
+
+```bash
 
 ```
-mpirun -n 4 ./NavierStokes -d 2 -f ../mesh/3D/grid_2D_coarse.msh -v 0.001 -u 0.45s
-mpirun -n 4 ./NavierStokes -d 3 -f ../mesh/3D/grid_3D_coarse_parallelepiped.msh -v 0.001 -u 2.25
+
+- Second 2D test commands execution:
+
+```bash
+
 ```
+
+- Third 2D test commands execution:
+
+```bash
+
+```
+
+- First 3D test commands execution:
+
+```bash
+
+```
+
+- Second 3D test commands execution:
+
+```bash
+./NavierStokes -d 3 -f ../mesh/3D/mesh3D_coarse_cylinder.msh -v 0.001 -u 2.25 -T 4.0 -dt 0.2 -td false
+```
+
+- Third 3D test commands execution:
+
+```bash
+./NavierStokes -d 3 -f ../mesh/3D/mesh3D_coarse_cylinder.msh -v 0.001 -u 2.25 -T 4.0 -dt 0.2 -td true
+```
+
+- Example test in order to show Chorin Temam potential with high Reynolds numbers:
+
+(Luca inserisci i dati sulla simulazione da te fatta)
+
+```bash
+./NavierStokesChorinTemam
+```
+
+**Some usefull remarks:**
+
+- type the following command to get any help on the flags and their usage:
+
+```bash
+./NavierStokes -h
+```
+
+- Each of these commands can be run in parallel using `Open_MPI` command `mpirun` followed by the flag `-n n_proc` in order to execute the scripts in parallel and exploit the Trilinos module features.
+
+- Different meshes file can be found in `./mesh` directory, such as finer meshes and the 'parallelepiped` ones (just for 3D tests).
+
+- Results are stored in a `./results/common` folder, ready to be visualized using Paraview visualization software.
