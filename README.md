@@ -60,13 +60,13 @@ Meshes will be generated inside the `./mesh` directory, while executables will b
 - First 2D test commands execution:
 
 ```bash
-
+./NavierStokes -d 2 -f ../mesh/2D/mesh2D_coarse_cylinder.msh -v 0.001 -u 0.3 -T 5.0 -dt 0.2 -td false
 ```
 
 - Second 2D test commands execution:
 
 ```bash
-
+./NavierStokes -d 2 -f ../mesh/2D/mesh2D_coarse_cylinder.msh -v 0.001 -u 1.5 -T 5.0 -dt 0.2 -td false
 ```
 
 - Third 2D test commands execution:
