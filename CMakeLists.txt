@@ -42,6 +42,8 @@ add_custom_target(generate_meshes ALL
     WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}"
 )
 
+file(MAKE_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/results/common")
+
 #add_executable(Stokes
 #    src/test_stokes.cpp
 #    src/Stokes.cpp
@@ -59,7 +61,7 @@ add_custom_target(generate_meshes ALL
 
 
 add_executable(NavierStokes
-    src/test_ns.cpp
+    src/main_ns.cpp
     src/NonStationaryNavierStokes.cpp
     src/preconditioners/BlockSchurPreconditioner.cpp
     src/preconditioners/BlockTriangularPrecondition.cpp
@@ -67,7 +69,7 @@ add_executable(NavierStokes
 deal_ii_setup_target(NavierStokes)
 
 add_executable(NavierStokesChorinTemam
-    src/test_fns.cpp
+    src/main_fns.cpp
     src/NavierStokesFractional.cpp
     src/NonStationaryNavierStokes.cpp
     src/preconditioners/BlockSchurPreconditioner.cpp
