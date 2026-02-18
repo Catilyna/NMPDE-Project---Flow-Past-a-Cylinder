@@ -1,5 +1,6 @@
 import gmsh
 import argparse
+import os
 
 class Mesh2D:
     """
@@ -97,7 +98,10 @@ class Mesh2D:
             self.setFields(0.01, 0.5, 0.02, 0.1, 100)       
         else:
             self.setFields(0.0075, 0.25, 0.01, 0.05, 100)       
-            
+
+        output_dir = "../mesh/2D"
+        if not os.path.exists(output_dir):
+            os.makedirs(output_dir)            
         gmsh.model.mesh.generate(2) # Generate 2D mesh
         gmsh.write(f"../mesh/2D/{output_filename}.msh")
 
