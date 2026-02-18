@@ -99,31 +99,15 @@ namespace NavierStokes
 
         this->zero_constraints.close();
 
-        pressure_constraints.clear(); // Make sure you added this object to your class!
+        pressure_constraints.clear();
         DoFTools::make_hanging_node_constraints(this->dof_handler, pressure_constraints);
         
         // Extract strictly the pressure part of the system
         std::vector<bool> pressure_components(dim + 1, false);
         pressure_components[dim] = true; // set to true just the pressure component
         ComponentMask pressure_mask(pressure_components);
-        /*
-        IndexSet pressure_dofs = DoFTools::extract_dofs(this->dof_handler, pressure_mask);
-        
-        // Only Processor 0 adds the line
-        if (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0)
-        {
-            if (pressure_dofs.n_elements() > 0) {
-                // Pick the very first pressure DoF we own
-                const auto first_pressure_dof = pressure_dofs.nth_index_in_set(0);
-                
-                this->pressure_constraints.add_line(first_pressure_dof);
-                this->pressure_constraints.set_inhomogeneity(first_pressure_dof, 0.0);
-            }
-        } 
-        */
-        // This is the "standard" way. No rank-checking needed.
 
-        Functions::ConstantFunction<dim> pressure_outlet_function(0.0, dim + 1);
+        Functions::ConstantFunction<dim> pressure_outlet_function(-1.0, dim + 1);
 
         VectorTools::interpolate_boundary_values(this->dof_handler,
                                                 1, 
@@ -242,7 +226,6 @@ namespace NavierStokes
         std::vector<double> div_intermediate_velocity(n_q_points);
 
         // setup index displacement for pressure
-        // const auto pressure_offset = step2_rhs.block(0).size();
     
         for (const auto &cell : this->dof_handler.active_cell_iterators())
         {
@@ -419,7 +402,6 @@ namespace NavierStokes
         solution_tilde.block(1) = 0;
         // Update ghost values for the tilde solution
         solution_tilde.block(0).update_ghost_values();
-        // this->pcout << "Solution norm: " << this->solution.l2_norm() << "\n";
         auto end = std::chrono::high_resolution_clock::now();
         std::chrono::duration<double> diff = end - start;
         this->pcout << "Step 1 duration is: " << diff.count() << "\n";
@@ -441,8 +423,6 @@ namespace NavierStokes
         SolverCG<TrilinosWrappers::MPI::Vector> cg(solver_control); // since the matrix is SPD
         
         preconditioner.initialize(step2_matrix.block(1, 1), data);
-        // this->pcout << "Matrix: " << step2_matrix.block(1, 1).frobenius_norm() << "\n";
-        // this->pcout << "RHS: " << step2_rhs.block(1).l2_norm() << "\n";
 
         TrilinosWrappers::MPI::Vector pressure;
         pressure.reinit(step2_rhs.block(1));
@@ -456,7 +436,7 @@ namespace NavierStokes
         // set pressure DoFs to 0
         solution_tilde.block(1) = 0;
         this->solution.block(1).update_ghost_values();
-        // this->pcout << "Solution: " << this->solution.block(1).l2_norm() << "\n";
+
         auto end = std::chrono::high_resolution_clock::now();
         std::chrono::duration<double> diff = end - start;
         this->pcout << "Step 2 duration is: " << diff.count() << "\n";
@@ -507,7 +487,7 @@ namespace NavierStokes
         this->erase_txt_content();
         this->time = 0.0;
         this->pcout << "delta t: " << this->delta_t << "\n";
-        this->output_results(); // output initial condition)
+        this->output_results(); // output initial condition
 
         while (this->time < this->T)
         {

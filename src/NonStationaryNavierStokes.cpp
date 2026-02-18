@@ -94,7 +94,6 @@ namespace NavierStokes{
 										sparsity_pressure_mass);
 		sparsity_pressure_mass.compress();
 
-		// code taken from Bucelli's labs
 		pcout << "  Initializing the system matrix" << std::endl;
 		system_matrix.reinit(sparsity_pattern);
 		pressure_mass.reinit(sparsity_pressure_mass);
@@ -113,7 +112,6 @@ namespace NavierStokes{
 		old_solution.reinit(block_owned_dofs, block_relevant_dofs, MPI_COMM_WORLD);
 
 		// compute Reynolds Number
-		// compute Reynolds number just once
 		if(dim == 2) 
 		{
 			reynolds_number = ( (2.0/3.0) * U_max * 0.1 ) / viscosity;
@@ -194,7 +192,6 @@ namespace NavierStokes{
 		// Apply u = 0.0 to all Dirichlet boundaries
 		{			
 			// The Inlet is now set to zero cause we dont want newton to update it.
-			// We don't want to change the inlet velocity during an update.
 			boundary_functions[0] = &zero_function; 
 			
 			// Walls and Obstacles are also zero (obviously)
@@ -208,28 +205,6 @@ namespace NavierStokes{
 													velocity_mask);
 		}
 		zero_constraints.close();
-
-		// Fix pressure at one DoF to remove null space 
-		// Maybe we need mean zero condition? We are not using Neummann BC, so maybe
-		// we should indeed use L2_0 mean zero condition.
-		// Moreover, in parallel only rank 0 should set this constraint, otherwise we will have conflicts.
-		// OR MAYBE WE SHOULDNOT SET THE CONSTAINT AT ALL
-		// SINCE WE ARE FIXING THE WHOLE OUTLET PRESSURE TO 1.0
-		/*if(this->mpi_rank == 0){
-			// We need to identify the first pressure DoF and set it to zero to fix the null space.
-			std::vector<bool> pressure_components(dim + 1, false);
-			pressure_components[dim] = true; // pressure is last component
-			ComponentMask pressure_mask(pressure_components);
-
-			IndexSet pressure_dofs = DoFTools::extract_dofs(dof_handler, pressure_mask);
-			if (pressure_dofs.n_elements() > 0) {
-				const auto first_pressure_dof = pressure_dofs.nth_index_in_set(0);
-				nonzero_constraints.add_line(first_pressure_dof);
-				nonzero_constraints.set_inhomogeneity(first_pressure_dof, 0.0);
-				zero_constraints.add_line(first_pressure_dof);
-				zero_constraints.set_inhomogeneity(first_pressure_dof, 0.0);
-			}
-		}*/
 	}
 
 	
@@ -292,10 +267,7 @@ namespace NavierStokes{
 			cell_pressure_mass_matrix = 0.0;
 			local_rhs            = 0.0;
 
-			// We need to know the values and the gradient of velocity on quadrature nodes (explained by Bucelli)
-			/*fe_values[velocities].get_function_values(evaluation_point, present_velocity_values);
-			fe_values[velocities].get_function_gradients(evaluation_point, present_velocity_gradients);
-			fe_values[pressure].get_function_values(evaluation_point, present_pressure_values);*/
+			// We need to know the values and the gradient of velocity on quadrature nodes
 			fe_values[velocities].get_function_values(solution, present_velocity_values);
 			fe_values[velocities].get_function_gradients(solution, present_velocity_gradients);
 			fe_values[pressure].get_function_values(solution, present_pressure_values);
@@ -305,12 +277,6 @@ namespace NavierStokes{
     		fe_values[velocities].get_function_gradients(old_solution, old_velocity_gradients);
     		fe_values[pressure].get_function_values(old_solution, old_pressure_values);
 	
-			/* DEBUGGING PURPOSES CODE
-			for (const auto& tensor : present_velocity_gradients) {
-			if (std::isinf(tensor.norm())) {
-				pcout << "TROVATO GRADIENTE INFINITO NELLA CELLA: " << cell->active_cell_index() << std::endl;
-				}
-			}*/
 			for (unsigned int q = 0; q < n_q_points; ++q) {
 				for (unsigned int k = 0; k < dofs_per_cell; ++k) {
 					div_phi_u[k] = fe_values[velocities].divergence(k, q);
@@ -336,7 +302,7 @@ namespace NavierStokes{
 							local_matrix(i, j) -= theta * (div_phi_u[i] * phi_p[j] * fe_values.JxW(q) 
 															  + phi_p[i] * div_phi_u[j] * fe_values.JxW(q));
 
-							// added this, exactly how Bucelli implemented it. Seems to be needed for preconditioner stability
+							// Pressure mass matrix (used for preconditioning)
 							cell_pressure_mass_matrix(i, j) += phi_p[i] * phi_p[j] * fe_values.JxW(q);
 						}
 					}
@@ -488,7 +454,7 @@ namespace NavierStokes{
 				system_rhs *= -1.0; // we need to solve for -F(u), so we change the sign here
 				solve(first_step);
 
-				// interesting backtracking approach, instead of taking a fixed alpha for the newton iter it halves
+				// backtracking approach, instead of taking a fixed alpha for the newton iter it halves
 				// it each time				
 				for (double alpha = 1.0; alpha > 1e-5; alpha *= 0.5) {
 					evaluation_point = present_solution;
@@ -515,7 +481,7 @@ namespace NavierStokes{
 		   nonzero_constraints.distribute(present_solution);
 	}
 	
-	/** @brief Function that just prints the output (pretty similar to Bucelli's) 
+	/** @brief Function that just prints the output 
 	*/
 	template <int dim>
 	void NonStationaryNavierStokes<dim>::output_results() const
@@ -540,8 +506,7 @@ namespace NavierStokes{
 		const Vector<double> partitioning(partition_int.begin(), partition_int.end());
 		data_out.add_data_vector(partitioning, "partitioning");
 		data_out.build_patches();
-
-		// here to insert correct Reynolds Number aswell REMEMBER THIS 
+ 
 		
 		const std::string output_file_name = std::to_string(static_cast<int>(std::round(reynolds_number))) 
 															+ "Re-NS_Solution_";
@@ -554,35 +519,6 @@ namespace NavierStokes{
 		pcout << "Output written to " << output_file_name << "." << std::endl;
 		pcout << "===============================================" << std::endl;
 	}
-	
-	/** @brief Function that it samples the velocity profile along the vertical centerline
-	 *  of the domain and writes it to a text file. Usefull for testing and validation purposes.
-	 */
-	template <int dim>
-	void NonStationaryNavierStokes<dim>::process_solution()
-	{
-		// here Reynolds number to insert of course REMEMBER THIS 
-		std::ofstream f(std::to_string(1.0 / viscosity) + "-line-" + ".txt");
-		f << "# y u_x u_y" << std::endl;
-		Point<dim> p;
-		p[0] = 0.5;
-		p[1] = 0.5;
-		f << std::scientific;
-	
-		// samples specifically 101 points
-		for (unsigned int i = 0; i <= 100; ++i) {
-			p[dim - 1] = i / 100.0;
-			Vector<double> tmp_vector(dim + 1);
-	
-			// given p it calculates the value of the present solution and stores it in tmp vector
-			VectorTools::point_value(dof_handler, present_solution, p, tmp_vector);
-			f << p[dim - 1];
-			for (int j = 0; j < dim; ++j)
-				f << ' ' << tmp_vector(j);
-			f << std::endl;
-		}
-	}
-
 	
 	/** @brief Set the initial condition for present_solution and old_solution. */
 	template <int dim>
@@ -656,7 +592,6 @@ namespace NavierStokes{
 			{
 				for (unsigned int face = 0; face < cell->n_faces(); ++face)
 				{
-					// Check boundary id 3 is the cylinder
 					if (cell->face(face)->at_boundary() && cell->face(face)->boundary_id() == 3)
 					{
 						fe_face_values.reinit(cell, face);
@@ -702,7 +637,7 @@ namespace NavierStokes{
 		// boundary normal vectors point out of the fluid	
 		global_force *= -1.0;
 
-		// Calculate Coefficients [C = [2] * Force / (rho * U_mean^2 * ReferenceArea)]
+		// Calculate Coefficients [C = Force / (rho * U_mean^2 * ReferenceArea)]
 		double reference_area = (dim == 2) ? D : (D * H_channel); 
 		double reference_velocity = (dim == 2) ? ((2.0 / 3.0) * U_max) : (((4.0 / 9.0)) * U_max); 
 		double denom = reference_velocity * reference_velocity * reference_area;

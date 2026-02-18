@@ -243,8 +243,6 @@ namespace NavierStokes{
 
             void solve(const bool initial_step);
 
-            void process_solution();
-
             void output_results() const;
 
             void newton_iteration(const double tolerance,
@@ -282,13 +280,8 @@ namespace NavierStokes{
 
             std::unique_ptr<Function<dim>> inlet_velocity_function;
 
-            // InitialCondition initial_condition; ARE WE USING THIS??
-
             std::vector<types::global_dof_index> dofs_per_block;
 
-            // Luca: I am quite confused about the template parameters here
-            // G++ says that both are required, but Bucelli in his code only
-            // specifies one (and it works). Need to clarify this point.
             parallel::fullydistributed::Triangulation<dim, dim> mesh;
 
             std::unique_ptr<FiniteElement<dim>> fe;

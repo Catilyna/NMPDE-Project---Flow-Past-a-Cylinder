@@ -44,22 +44,6 @@ add_custom_target(generate_meshes ALL
 
 file(MAKE_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/results/common")
 
-#add_executable(Stokes
-#    src/test_stokes.cpp
-#    src/Stokes.cpp
-#    src/BoundaryValues.cpp
-#)
-#deal_ii_setup_target(Stokes)
-
-#add_executable(StationaryNavierStokes
-#    src/test_sns.cpp
-#    src/StationaryNavierStokes.cpp
-#    src/preconditioners/BlockSchurPreconditioner.cpp
-#    src/preconditioners/BlockTriangularPrecondition.cpp
-#)
-#deal_ii_setup_target(StationaryNavierStokes)
-
-
 add_executable(NavierStokes
     src/main_ns.cpp
     src/NonStationaryNavierStokes.cpp
