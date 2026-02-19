@@ -36,7 +36,7 @@ cd NPDE-Project---Flow-Past-a-Cylinder
 - Load necessary modules:
 
 ```bash
-$ module load gcc-glibc dealii
+module load gcc-glibc dealii
 ```
 
 - Run the following preliminary commands:
@@ -53,7 +53,7 @@ cmake ..
 make
 ```
 
-Meshes will be generated inside the `./mesh` directory, while executables will be created into `./build`.
+Meshes will be generated inside the `./mesh` directory, while executables will be created into `./build`. Moreover, a folder `./results/common` will be created for storing the output of the results.
 
 ### Execution:
 
@@ -107,8 +107,12 @@ Meshes will be generated inside the `./mesh` directory, while executables will b
 ./NavierStokes -h
 ```
 
-- Each of these commands can be run in parallel using `Open_MPI` command `mpirun` followed by the flag `-n n_proc` in order to execute the scripts in parallel and exploit the Trilinos module features.
+- Each of these commands can be run in parallel using `Open_MPI` command `mpirun` followed by the flag `-n n_proc` in order to execute the scripts in parallel and exploit the Trilinos module features (this is indeed HIGHLY recommended!).
 
 - Different meshes file can be found in `./mesh` directory, such as finer meshes and the 'parallelepiped` ones (just for 3D tests).
 
 - Results are stored in a `./results/common` folder, ready to be visualized using Paraview visualization software.
+
+- In the `./results` folder a `drag_lift_history.txt` dataset is created in which to save the drag and lift coefficients at each timestep. To generate a plot, it is sufficient to run the Python script `plot_coefficients.py` that can be found in the `./plot_gen` folder.
+
+- The `./report` folder contains a report of the projects, as well as the source code to generate such a report.
