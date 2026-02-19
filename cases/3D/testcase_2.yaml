@@ -4,7 +4,7 @@
 
 case:
   name: "3D-2 steady testcase"
-  dimensionality: 2
+  dimensionality: 3
 
 # ------------------------------------------
 # Physical Parameters
@@ -22,7 +22,7 @@ physics:
     cylinder_diameter: 0.1     
 
   initial_conditions:
-    Ux: 16 * u_mean * y * z * (y_range[1] - y) * (z_range[1] - z) / y_range**4
+    Ux: 16 * u_max * y * z * (y_range[1] - y) * (z_range[1] - z) / y_range**4
     Uy: 0
     Uz: 0
     pressure: 0.0
@@ -30,7 +30,7 @@ physics:
   boundary_conditions:
     inlet:
       type: "parabolic_velocity" # Custom type handled by your solver
-      u_mean: 2.25               # Mean velocity
+      u_max: 2.25               # Max velocity
     outlet:
       type: "pressure_outlet"
-      value: 0.0                 # Not specified
+      value: -1.0                 # Not specified
